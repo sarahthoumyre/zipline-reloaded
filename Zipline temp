@@ -352,6 +352,41 @@ Plus élevée
 proche de 1
 Plus fort
 
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Charger les données
+df = pd.read_excel("tes_donnees.xlsx")  # contient : 'Date', 'SPX', 'VSTN'
+df = df.sort_values("Date").reset_index(drop=True)
+df["Date"] = pd.to_datetime(df["Date"])
+df.set_index("Date", inplace=True)
+
+# Rendements journaliers
+df["SPX_return"] = df["SPX"].pct_change()
+
+# Vol réalisée future (5 et 9 jours)
+df["realized_vol_5d"] = df["SPX_return"].rolling(window=5).std().shift(-4) * np.sqrt(252)
+df["realized_vol_9d"] = df["SPX_return"].rolling(window=9).std().shift(-8) * np.sqrt(252)
+
+# Moyennes mobiles glissantes sur 10 jours pour lisser
+df["mv_VSTN"] = df["VSTN"].rolling(10).mean()
+df["mv_real_5d"] = df["realized_vol_5d"].rolling(10).mean()
+df["mv_real_9d"] = df["realized_vol_9d"].rolling(10).mean()
+
+# Tracé
+plt.figure(figsize=(14, 6))
+plt.plot(df.index, df["mv_VSTN"], label="VSTN (moyenne mobile)", linewidth=2)
+plt.plot(df.index, df["mv_real_5d"], label="Vol réalisée 5j (moyenne mobile)", alpha=0.8)
+plt.plot(df.index, df["mv_real_9d"], label="Vol réalisée 9j (moyenne mobile)", alpha=0.8)
+plt.title("VSTN vs Volatilité Réalisée (moyennes mobiles)")
+plt.ylabel("Volatilité annualisée")
+plt.xlabel("Date")
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
 
 
 
