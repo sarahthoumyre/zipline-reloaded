@@ -1,0 +1,179 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.cluster import KMeans
+from sklearn.mixture import GaussianMixture
+from hmmlearn.hmm import GaussianHMM
+
+# ----------------------------
+# 1. Charger les données
+# ----------------------------
+# Remplacer par le nom de ton fichier Excel
+file_path = "tes_donnees_vx_vvx.xlsx"
+df = pd.read_excel(file_path)
+
+# Assurer le bon format
+df = df.dropna(subset=["VX", "VVX"])
+X = df[["VX", "VVX"]].values
+
+# ----------------------------
+# 2. K-Means
+# ----------------------------
+kmeans = KMeans(n_clusters=2, random_state=0).fit(X)
+df["Cluster_KMeans"] = kmeans.labels_
+
+# ----------------------------
+# 3. GMM
+# ----------------------------
+gmm = GaussianMixture(n_components=2, random_state=0).fit(X)
+df["Cluster_GMM"] = gmm.predict(X)
+
+# ----------------------------
+# 4. HMM
+# ----------------------------
+hmm_model = GaussianHMM(n_components=2, covariance_type="full", n_iter=100, random_state=0)
+hmm_model.fit(X)
+df["Cluster_HMM"] = hmm_model.predict(X)
+
+# ----------------------------
+# 5. Visualisation
+# ----------------------------
+fig, axs = plt.subplots(1, 3, figsize=(18, 5))
+
+axs[0].scatter(df["VX"], df["VVX"], c=df["Cluster_KMeans"], cmap='viridis')
+axs[0].set_title("K-Means Clustering")
+axs[0].set_xlabel("VX")
+axs[0].set_ylabel("VVX")
+
+axs[1].scatter(df["VX"], df["VVX"], c=df["Cluster_GMM"], cmap='viridis')
+axs[1].set_title("Gaussian Mixture Model")
+axs[1].set_xlabel("VX")
+axs[1].set_ylabel("VVX")
+
+axs[2].scatter(df["VX"], df["VVX"], c=df["Cluster_HMM"], cmap='viridis')
+axs[2].set_title("Hidden Markov Model")
+axs[2].set_xlabel("VX")
+axs[2].set_ylabel("VVX")
+
+plt.tight_layout()
+plt.show()
+
+
+
+
+⸻
+
+Objectif :
+
+Clustering temporel sur les points (VX, VVX), pour identifier deux régimes de marché :
+	•	Régime 1 : “Calme” – bas VX & VVX (favorable à l’investissement),
+	•	Régime 2 : “Stress” – haut VX & VVX (à éviter).
+
+⸻
+
+Méthodes de clustering adaptées :
+
+1. K-Means (classique, baseline)
+	•	Idée : Clustering sur (VX, VVX) à chaque date.
+	•	Avantage : Simple, rapide, efficace si les clusters sont bien séparés.
+	•	Limite : Hypothèse de clusters sphériques, pas robuste aux outliers.
+
+Code (sklearn) :
+
+from sklearn.cluster import KMeans
+import numpy as np
+
+X = np.column_stack((VX, VVX))  # tes deux séries temporelles
+kmeans = KMeans(n_clusters=2, random_state=42).fit(X)
+labels = kmeans.labels_
+
+
+
+⸻
+
+2. Gaussian Mixture Models (GMM)
+	•	Idée : Modélise les données comme issues de 2 lois normales.
+	•	Avantage : Clusters elliptiques + probabilités d’appartenance.
+	•	Limite : Sensible aux hypothèses de normalité.
+
+Utilisation :
+
+from sklearn.mixture import GaussianMixture
+
+gmm = GaussianMixture(n_components=2, covariance_type='full', random_state=42).fit(X)
+labels = gmm.predict(X)
+probas = gmm.predict_proba(X)
+
+
+
+⸻
+
+3. Hidden Markov Model (HMM)
+	•	Idée : Modélise la dynamique temporelle : les régimes sont des états cachés avec une probabilité de transition.
+	•	Avantage : Très adapté aux séries temporelles – régime latent, transitions, persistance dans les régimes.
+	•	Librairie : hmmlearn ou pomegranate.
+
+Approche typique :
+
+from hmmlearn.hmm import GaussianHMM
+
+model = GaussianHMM(n_components=2, covariance_type='full', n_iter=100)
+model.fit(X)
+hidden_states = model.predict(X)
+
+
+
+⸻
+
+4. Spectral Clustering
+	•	Idée : Basé sur un graphe de similarité entre les points.
+	•	Avantage : Fonctionne mieux avec des formes non convexes.
+	•	À tester si KMeans échoue à bien séparer VX/VVX.
+
+Code :
+
+from sklearn.cluster import SpectralClustering
+
+sc = SpectralClustering(n_clusters=2, affinity='rbf').fit(X)
+labels = sc.labels_
+
+
+
+⸻
+
+5. DBSCAN (moins conseillé ici)
+	•	Idée : Clustering basé sur la densité.
+	•	Limite : Ne produit pas forcément 2 clusters, et ne gère pas bien les régimes temporels.
+
+⸻
+
+Quelle méthode choisir ?
+
+Méthode	Dynamique temporelle	Forme des clusters	Avantage principal
+KMeans	Non	Sphérique	Rapide, baseline
+GMM	Non	Elliptique	Probabilités + formes flexibles
+HMM	Oui	Flexibles	Captures les changements de régimes
+Spectral	Non	Non-linéaires	Pour données non convexes
+
+
+
+⸻
+
+
+Pourquoi le HMM est le plus adapté ici :
+	•	Modélisation temporelle : contrairement à K-Means et GMM, le HMM prend en compte la dépendance séquentielle. Il reconnaît que les régimes de marché ne changent pas brutalement chaque jour mais évoluent progressivement, avec des probabilités de transition entre états.
+	•	Régimes persistants : le HMM permet de capturer la persistance d’un régime (ex : période prolongée de volatilité faible), ce qui est très réaliste dans un contexte de marché.
+	•	Analyse dynamique depuis 2006 : comme tu as une longue série temporelle, tu as suffisamment d’observations pour que le HMM apprenne des transitions significatives entre régimes.
+	•	Sortie utile pour la stratégie : le HMM te donne, pour chaque jour, une probabilité d’appartenance à chaque régime. Tu peux donc faire du signal d’allocation basé sur ces probabilités.
+
+⸻
+
+Limites à garder en tête :
+	•	Sensible à l’initialisation et aux hyperparamètres (mais ça se contrôle bien),
+	•	Plus difficile à expliquer à un public non technique que K-Means,
+	•	Suppose une forme particulière des distributions (gaussienne par défaut).
+
+⸻
+
+
+
