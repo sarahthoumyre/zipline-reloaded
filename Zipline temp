@@ -262,4 +262,80 @@ print(f"Corrélation VSTN vs vol réalisée future (9j ouvrés) : {corr:.4f}")
 
 
 
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
+
+# Charger les données
+df = pd.read_excel("tes_donnees.xlsx")  # doit contenir 'Date', 'SPX', 'VSTN'
+df = df.sort_values("Date").reset_index(drop=True)
+df["SPX_return"] = df["SPX"].pct_change()
+
+# Vol réalisée sur 5 jours (du jour j+1 à j+5)
+df["realized_vol_5d"] = df["SPX_return"].rolling(window=5).std().shift(-4) * np.sqrt(252)
+
+# Vol réalisée sur 9 jours (du jour j+1 à j+9)
+df["realized_vol_9d"] = df["SPX_return"].rolling(window=9).std().shift(-8) * np.sqrt(252)
+
+# Filtrer les lignes valides
+df_5d = df.dropna(subset=["VSTN", "realized_vol_5d"])
+df_9d = df.dropna(subset=["VSTN", "realized_vol_9d"])
+
+# Fonction pour régression linéaire sans intercept
+def regression_results(X, y):
+    model = LinearRegression(fit_intercept=False).fit(X, y)
+    y_pred = model.predict(X)
+    r2 = r2_score(y, y_pred)
+    coef = model.coef_[0]
+    return coef, r2, y_pred
+
+# Régression 5 jours
+X5 = df_5d["VSTN"].values.reshape(-1, 1)
+y5 = df_5d["realized_vol_5d"].values
+coef5, r2_5, y5_pred = regression_results(X5, y5)
+corr5 = df_5d["VSTN"].corr(df_5d["realized_vol_5d"])
+
+# Régression 9 jours
+X9 = df_9d["VSTN"].values.reshape(-1, 1)
+y9 = df_9d["realized_vol_9d"].values
+coef9, r2_9, y9_pred = regression_results(X9, y9)
+corr9 = df_9d["VSTN"].corr(df_9d["realized_vol_9d"])
+
+# Affichage des résultats
+print("== Résultats 5 jours ==")
+print(f"Corrélation : {corr5:.4f}")
+print(f"Coefficient régression (sans intercept) : {coef5:.4f}")
+print(f"R² : {r2_5:.4f}\n")
+
+print("== Résultats 9 jours ==")
+print(f"Corrélation : {corr9:.4f}")
+print(f"Coefficient régression (sans intercept) : {coef9:.4f}")
+print(f"R² : {r2_9:.4f}")
+
+# Nuage de points et régressions
+fig, axs = plt.subplots(1, 2, figsize=(14, 6))
+
+axs[0].scatter(X5, y5, alpha=0.6, label="Points")
+axs[0].plot(X5, y5_pred, color="red", label=f"Régression (R² = {r2_5:.2f})")
+axs[0].set_title("VSTN vs Vol réalisée (5 jours)")
+axs[0].set_xlabel("VSTN")
+axs[0].set_ylabel("Vol réalisée (annualisée)")
+axs[0].legend()
+axs[0].grid(True)
+
+axs[1].scatter(X9, y9, alpha=0.6, label="Points")
+axs[1].plot(X9, y9_pred, color="red", label=f"Régression (R² = {r2_9:.2f})")
+axs[1].set_title("VSTN vs Vol réalisée (9 jours)")
+axs[1].set_xlabel("VSTN")
+axs[1].set_ylabel("Vol réalisée (annualisée)")
+axs[1].legend()
+axs[1].grid(True)
+
+plt.tight_layout()
+plt.show()
+
+
+
 
