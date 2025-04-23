@@ -177,3 +177,69 @@ Limites à garder en tête :
 
 
 
+J’ai mené une analyse sur deux indicateurs financiers :
+	•	VX (ou VIX), qui mesure la volatilité attendue du marché américain (en gros, à quel point les investisseurs pensent que ça va bouger),
+	•	VVX (ou VVIX), qui mesure à quel point cette volatilité elle-même est incertaine (la “volatilité de la volatilité”).
+
+L’idée est simple :
+Quand VX et VVX sont faibles, cela veut dire que le marché est plutôt calme et stable → c’est souvent un bon moment pour investir.
+Quand VX et VVX sont élevés, cela signale de l’incertitude ou du stress sur les marchés → ce sont des périodes à surveiller ou à éviter.
+
+Mon objectif était donc de reconnaître automatiquement, sur l’historique depuis 2006, quand le marché était en période “calme” ou en période de “stress”, sans intervention humaine. Pour cela, j’ai utilisé trois méthodes différentes de regroupement automatique de données, qu’on appelle des méthodes de clustering.
+
+⸻
+
+1. K-Means – Méthode simple de regroupement
+
+Comment ça fonctionne :
+Cette méthode classe chaque jour dans un groupe selon les valeurs de VX et VVX, sans se soucier de la chronologie. Elle regarde simplement si ces deux chiffres sont proches de ceux de jours “calmes” ou de jours “stressés”, et crée deux groupes.
+
+Pourquoi je l’ai utilisée :
+Parce que c’est la méthode la plus simple, un bon point de départ.
+
+Ce que ça donne :
+On obtient bien deux groupes distincts. Mais le problème, c’est qu’un jour calme peut être entouré de jours stressés, car la méthode ne regarde pas ce qui s’est passé avant ou après. Elle ne voit pas la continuité du temps.
+
+⸻
+
+2. GMM – Méthode plus souple avec probabilités
+
+Comment ça fonctionne :
+Cette méthode est plus intelligente : au lieu de simplement mettre un jour dans un groupe, elle calcule la probabilité que ce jour appartienne à chaque groupe (calme ou stressé). C’est comme si elle disait : “Ce jour a 80 % de chances d’être calme, mais aussi 20 % d’être stressé.”
+
+Pourquoi je l’ai utilisée :
+Parce que c’est utile quand certaines journées sont à la frontière entre calme et stress.
+
+Ce que ça donne :
+La séparation est plus fluide que K-Means. Mais, comme K-Means, elle ne tient pas compte du temps. Elle regarde chaque jour séparément, sans se demander si le marché était déjà dans une phase calme ou stressée avant.
+
+⸻
+
+3. HMM – Modèle de régime qui suit l’évolution dans le temps
+
+Comment ça fonctionne :
+Cette méthode est la plus avancée. Elle suppose que le marché évolue dans le temps à travers des phases cachées, qu’on appelle régimes. À chaque instant, elle estime dans quel régime on est (calme ou stressé), mais surtout elle prend en compte ce qui s’est passé avant.
+
+Elle comprend donc qu’un marché calme ne devient pas stressé brutalement du jour au lendemain, mais qu’il y a une certaine continuité. Elle calcule aussi les probabilités de changement de régime : par exemple, “si on est dans un régime calme aujourd’hui, il y a 90 % de chances d’y rester demain”.
+
+Pourquoi je l’ai utilisée :
+Parce qu’elle est faite pour des données comme celles-ci : des séries qui évoluent dans le temps. Elle permet de repérer les grandes périodes de calme ou de stress, et pas juste des jours isolés.
+
+Ce que ça donne :
+Un découpage clair et cohérent de l’historique en longues phases calmes ou stressées. C’est exactement ce que je cherchais pour pouvoir adapter une stratégie d’investissement selon le régime identifié.
+
+⸻
+
+Pourquoi je préfère le HMM
+
+Parmi les trois méthodes, c’est le HMM qui reflète le mieux la réalité des marchés :
+	•	Il voit les dynamiques dans le temps,
+	•	Il identifie des phases continues, pas juste des points dispersés,
+	•	Il permet de construire un indicateur robuste pour ajuster les prises de décision en fonction du contexte de marché.
+
+⸻
+
+
+
+
+
