@@ -388,5 +388,63 @@ plt.tight_layout()
 plt.show()
 
 
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
+
+# Charger les données
+df = pd.read_excel("tes_donnees.xlsx")  # contient 'Date', 'SPX', 'VSTN'
+df["Date"] = pd.to_datetime(df["Date"])
+df = df.sort_values("Date").reset_index(drop=True)
+
+# Calcul des rendements journaliers
+df["SPX_return"] = df["SPX"].pct_change()
+
+# Fonction pour calculer la vol réalisée sur les 9 jours calendaires suivants
+vol_real_9cal = []
+
+for i in range(len(df)):
+    # extraire les rendements j+1 à j+9 calendaires
+    future_returns = df.loc[i+1:i+9, "SPX_return"]
+    if len(future_returns) == 9 and not future_returns.isna().any():
+        vol = np.std(future_returns, ddof=0) * np.sqrt(252)  # annualisation
+    else:
+        vol = np.nan
+    vol_real_9cal.append(vol)
+
+df["realized_vol_9d_cal"] = vol_real_9cal
+
+# Nettoyage
+df_corr = df.dropna(subset=["VSTN", "realized_vol_9d_cal"])
+
+# Corrélation
+corr = df_corr["VSTN"].corr(df_corr["realized_vol_9d_cal"])
+
+# Régression sans intercept
+X = df_corr["VSTN"].values.reshape(-1, 1)
+y = df_corr["realized_vol_9d_cal"].values
+reg = LinearRegression(fit_intercept=False).fit(X, y)
+y_pred = reg.predict(X)
+r2 = r2_score(y, y_pred)
+
+# Résultats
+print(f"Corrélation : {corr:.4f}")
+print(f"Coefficient de régression (sans intercept) : {reg.coef_[0]:.4f}")
+print(f"R² : {r2:.4f}")
+
+# Graphe
+plt.figure(figsize=(8, 6))
+plt.scatter(X, y, alpha=0.6, label="Points")
+plt.plot(X, y_pred, color="red", label=f"Régression (R² = {r2:.2f})")
+plt.title("VSTN vs Vol réalisée (9 jours calendaires)")
+plt.xlabel("VSTN (vol implicite)")
+plt.ylabel("Vol réalisée SPX (j+1 à j+9 calendaires)")
+plt.grid(True)
+plt.legend()
+plt.tight_layout()
+plt.show()
+
 
 
