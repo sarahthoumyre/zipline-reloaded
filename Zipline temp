@@ -1,450 +1,103 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.cluster import KMeans
-from sklearn.mixture import GaussianMixture
-from hmmlearn.hmm import GaussianHMM
-
-# ----------------------------
-# 1. Charger les données
-# ----------------------------
-# Remplacer par le nom de ton fichier Excel
-file_path = "tes_donnees_vx_vvx.xlsx"
-df = pd.read_excel(file_path)
-
-# Assurer le bon format
-df = df.dropna(subset=["VX", "VVX"])
-X = df[["VX", "VVX"]].values
-
-# ----------------------------
-# 2. K-Means
-# ----------------------------
-kmeans = KMeans(n_clusters=2, random_state=0).fit(X)
-df["Cluster_KMeans"] = kmeans.labels_
-
-# ----------------------------
-# 3. GMM
-# ----------------------------
-gmm = GaussianMixture(n_components=2, random_state=0).fit(X)
-df["Cluster_GMM"] = gmm.predict(X)
-
-# ----------------------------
-# 4. HMM
-# ----------------------------
-hmm_model = GaussianHMM(n_components=2, covariance_type="full", n_iter=100, random_state=0)
-hmm_model.fit(X)
-df["Cluster_HMM"] = hmm_model.predict(X)
-
-# ----------------------------
-# 5. Visualisation
-# ----------------------------
-fig, axs = plt.subplots(1, 3, figsize=(18, 5))
-
-axs[0].scatter(df["VX"], df["VVX"], c=df["Cluster_KMeans"], cmap='viridis')
-axs[0].set_title("K-Means Clustering")
-axs[0].set_xlabel("VX")
-axs[0].set_ylabel("VVX")
-
-axs[1].scatter(df["VX"], df["VVX"], c=df["Cluster_GMM"], cmap='viridis')
-axs[1].set_title("Gaussian Mixture Model")
-axs[1].set_xlabel("VX")
-axs[1].set_ylabel("VVX")
-
-axs[2].scatter(df["VX"], df["VVX"], c=df["Cluster_HMM"], cmap='viridis')
-axs[2].set_title("Hidden Markov Model")
-axs[2].set_xlabel("VX")
-axs[2].set_ylabel("VVX")
-
-plt.tight_layout()
-plt.show()
-
-
-
-
-⸻
-
-Objectif :
-
-Clustering temporel sur les points (VX, VVX), pour identifier deux régimes de marché :
-	•	Régime 1 : “Calme” – bas VX & VVX (favorable à l’investissement),
-	•	Régime 2 : “Stress” – haut VX & VVX (à éviter).
-
-⸻
-
-Méthodes de clustering adaptées :
-
-1. K-Means (classique, baseline)
-	•	Idée : Clustering sur (VX, VVX) à chaque date.
-	•	Avantage : Simple, rapide, efficace si les clusters sont bien séparés.
-	•	Limite : Hypothèse de clusters sphériques, pas robuste aux outliers.
-
-Code (sklearn) :
-
-from sklearn.cluster import KMeans
-import numpy as np
-
-X = np.column_stack((VX, VVX))  # tes deux séries temporelles
-kmeans = KMeans(n_clusters=2, random_state=42).fit(X)
-labels = kmeans.labels_
-
-
-
-⸻
-
-2. Gaussian Mixture Models (GMM)
-	•	Idée : Modélise les données comme issues de 2 lois normales.
-	•	Avantage : Clusters elliptiques + probabilités d’appartenance.
-	•	Limite : Sensible aux hypothèses de normalité.
-
-Utilisation :
-
-from sklearn.mixture import GaussianMixture
-
-gmm = GaussianMixture(n_components=2, covariance_type='full', random_state=42).fit(X)
-labels = gmm.predict(X)
-probas = gmm.predict_proba(X)
-
-
-
-⸻
-
-3. Hidden Markov Model (HMM)
-	•	Idée : Modélise la dynamique temporelle : les régimes sont des états cachés avec une probabilité de transition.
-	•	Avantage : Très adapté aux séries temporelles – régime latent, transitions, persistance dans les régimes.
-	•	Librairie : hmmlearn ou pomegranate.
-
-Approche typique :
-
-from hmmlearn.hmm import GaussianHMM
-
-model = GaussianHMM(n_components=2, covariance_type='full', n_iter=100)
-model.fit(X)
-hidden_states = model.predict(X)
-
-
-
-⸻
-
-4. Spectral Clustering
-	•	Idée : Basé sur un graphe de similarité entre les points.
-	•	Avantage : Fonctionne mieux avec des formes non convexes.
-	•	À tester si KMeans échoue à bien séparer VX/VVX.
-
-Code :
-
-from sklearn.cluster import SpectralClustering
-
-sc = SpectralClustering(n_clusters=2, affinity='rbf').fit(X)
-labels = sc.labels_
-
-
-
-⸻
-
-5. DBSCAN (moins conseillé ici)
-	•	Idée : Clustering basé sur la densité.
-	•	Limite : Ne produit pas forcément 2 clusters, et ne gère pas bien les régimes temporels.
-
-⸻
-
-Quelle méthode choisir ?
-
-Méthode	Dynamique temporelle	Forme des clusters	Avantage principal
-KMeans	Non	Sphérique	Rapide, baseline
-GMM	Non	Elliptique	Probabilités + formes flexibles
-HMM	Oui	Flexibles	Captures les changements de régimes
-Spectral	Non	Non-linéaires	Pour données non convexes
-
-
-
-⸻
-
-
-Pourquoi le HMM est le plus adapté ici :
-	•	Modélisation temporelle : contrairement à K-Means et GMM, le HMM prend en compte la dépendance séquentielle. Il reconnaît que les régimes de marché ne changent pas brutalement chaque jour mais évoluent progressivement, avec des probabilités de transition entre états.
-	•	Régimes persistants : le HMM permet de capturer la persistance d’un régime (ex : période prolongée de volatilité faible), ce qui est très réaliste dans un contexte de marché.
-	•	Analyse dynamique depuis 2006 : comme tu as une longue série temporelle, tu as suffisamment d’observations pour que le HMM apprenne des transitions significatives entre régimes.
-	•	Sortie utile pour la stratégie : le HMM te donne, pour chaque jour, une probabilité d’appartenance à chaque régime. Tu peux donc faire du signal d’allocation basé sur ces probabilités.
-
-⸻
-
-Limites à garder en tête :
-	•	Sensible à l’initialisation et aux hyperparamètres (mais ça se contrôle bien),
-	•	Plus difficile à expliquer à un public non technique que K-Means,
-	•	Suppose une forme particulière des distributions (gaussienne par défaut).
-
-⸻
-
-
-
-J’ai mené une analyse sur deux indicateurs financiers :
-	•	VX (ou VIX), qui mesure la volatilité attendue du marché américain (en gros, à quel point les investisseurs pensent que ça va bouger),
-	•	VVX (ou VVIX), qui mesure à quel point cette volatilité elle-même est incertaine (la “volatilité de la volatilité”).
-
-L’idée est simple :
-Quand VX et VVX sont faibles, cela veut dire que le marché est plutôt calme et stable → c’est souvent un bon moment pour investir.
-Quand VX et VVX sont élevés, cela signale de l’incertitude ou du stress sur les marchés → ce sont des périodes à surveiller ou à éviter.
-
-Mon objectif était donc de reconnaître automatiquement, sur l’historique depuis 2006, quand le marché était en période “calme” ou en période de “stress”, sans intervention humaine. Pour cela, j’ai utilisé trois méthodes différentes de regroupement automatique de données, qu’on appelle des méthodes de clustering.
-
-⸻
-
-1. K-Means – Méthode simple de regroupement
-
-Comment ça fonctionne :
-Cette méthode classe chaque jour dans un groupe selon les valeurs de VX et VVX, sans se soucier de la chronologie. Elle regarde simplement si ces deux chiffres sont proches de ceux de jours “calmes” ou de jours “stressés”, et crée deux groupes.
-
-Pourquoi je l’ai utilisée :
-Parce que c’est la méthode la plus simple, un bon point de départ.
-
-Ce que ça donne :
-On obtient bien deux groupes distincts. Mais le problème, c’est qu’un jour calme peut être entouré de jours stressés, car la méthode ne regarde pas ce qui s’est passé avant ou après. Elle ne voit pas la continuité du temps.
-
-⸻
-
-2. GMM – Méthode plus souple avec probabilités
-
-Comment ça fonctionne :
-Cette méthode est plus intelligente : au lieu de simplement mettre un jour dans un groupe, elle calcule la probabilité que ce jour appartienne à chaque groupe (calme ou stressé). C’est comme si elle disait : “Ce jour a 80 % de chances d’être calme, mais aussi 20 % d’être stressé.”
-
-Pourquoi je l’ai utilisée :
-Parce que c’est utile quand certaines journées sont à la frontière entre calme et stress.
-
-Ce que ça donne :
-La séparation est plus fluide que K-Means. Mais, comme K-Means, elle ne tient pas compte du temps. Elle regarde chaque jour séparément, sans se demander si le marché était déjà dans une phase calme ou stressée avant.
-
-⸻
-
-3. HMM – Modèle de régime qui suit l’évolution dans le temps
-
-Comment ça fonctionne :
-Cette méthode est la plus avancée. Elle suppose que le marché évolue dans le temps à travers des phases cachées, qu’on appelle régimes. À chaque instant, elle estime dans quel régime on est (calme ou stressé), mais surtout elle prend en compte ce qui s’est passé avant.
-
-Elle comprend donc qu’un marché calme ne devient pas stressé brutalement du jour au lendemain, mais qu’il y a une certaine continuité. Elle calcule aussi les probabilités de changement de régime : par exemple, “si on est dans un régime calme aujourd’hui, il y a 90 % de chances d’y rester demain”.
-
-Pourquoi je l’ai utilisée :
-Parce qu’elle est faite pour des données comme celles-ci : des séries qui évoluent dans le temps. Elle permet de repérer les grandes périodes de calme ou de stress, et pas juste des jours isolés.
-
-Ce que ça donne :
-Un découpage clair et cohérent de l’historique en longues phases calmes ou stressées. C’est exactement ce que je cherchais pour pouvoir adapter une stratégie d’investissement selon le régime identifié.
-
-⸻
-
-Pourquoi je préfère le HMM
-
-Parmi les trois méthodes, c’est le HMM qui reflète le mieux la réalité des marchés :
-	•	Il voit les dynamiques dans le temps,
-	•	Il identifie des phases continues, pas juste des points dispersés,
-	•	Il permet de construire un indicateur robuste pour ajuster les prises de décision en fonction du contexte de marché.
-
-⸻
-
-
-import pandas as pd
-import numpy as np
-
-# Charger les données
-df = pd.read_excel("tes_donnees.xlsx")  # colonnes : 'Date', 'VSTN', 'SPX'
-df = df.sort_values("Date").reset_index(drop=True)
-
-# Calcul des rendements
-df["SPX_return"] = df["SPX"].pct_change()
-
-# Vol réalisée sur les 9 jours suivants (rolling std sur j+1 à j+9)
-df["realized_vol_9d"] = df["SPX_return"].rolling(window=9).std().shift(-8) * np.sqrt(252)
-
-# Décaler la série pour que VSTN au jour j corresponde à la vol réalisée j+1 à j+9
-df_corr = df.dropna(subset=["VSTN", "realized_vol_9d"])
-
-# Corrélation
-corr = df_corr["VSTN"].corr(df_corr["realized_vol_9d"])
-print(f"Corrélation VSTN vs vol réalisée future (9j ouvrés) : {corr:.4f}")
-
-
-
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
 
 # Charger les données
-df = pd.read_excel("tes_donnees.xlsx")  # doit contenir 'Date', 'SPX', 'VSTN'
-df = df.sort_values("Date").reset_index(drop=True)
-df["SPX_return"] = df["SPX"].pct_change()
-
-# Vol réalisée sur 5 jours (du jour j+1 à j+5)
-df["realized_vol_5d"] = df["SPX_return"].rolling(window=5).std().shift(-4) * np.sqrt(252)
-
-# Vol réalisée sur 9 jours (du jour j+1 à j+9)
-df["realized_vol_9d"] = df["SPX_return"].rolling(window=9).std().shift(-8) * np.sqrt(252)
-
-# Filtrer les lignes valides
-df_5d = df.dropna(subset=["VSTN", "realized_vol_5d"])
-df_9d = df.dropna(subset=["VSTN", "realized_vol_9d"])
-
-# Fonction pour régression linéaire sans intercept
-def regression_results(X, y):
-    model = LinearRegression(fit_intercept=False).fit(X, y)
-    y_pred = model.predict(X)
-    r2 = r2_score(y, y_pred)
-    coef = model.coef_[0]
-    return coef, r2, y_pred
-
-# Régression 5 jours
-X5 = df_5d["VSTN"].values.reshape(-1, 1)
-y5 = df_5d["realized_vol_5d"].values
-coef5, r2_5, y5_pred = regression_results(X5, y5)
-corr5 = df_5d["VSTN"].corr(df_5d["realized_vol_5d"])
-
-# Régression 9 jours
-X9 = df_9d["VSTN"].values.reshape(-1, 1)
-y9 = df_9d["realized_vol_9d"].values
-coef9, r2_9, y9_pred = regression_results(X9, y9)
-corr9 = df_9d["VSTN"].corr(df_9d["realized_vol_9d"])
-
-# Affichage des résultats
-print("== Résultats 5 jours ==")
-print(f"Corrélation : {corr5:.4f}")
-print(f"Coefficient régression (sans intercept) : {coef5:.4f}")
-print(f"R² : {r2_5:.4f}\n")
-
-print("== Résultats 9 jours ==")
-print(f"Corrélation : {corr9:.4f}")
-print(f"Coefficient régression (sans intercept) : {coef9:.4f}")
-print(f"R² : {r2_9:.4f}")
-
-# Nuage de points et régressions
-fig, axs = plt.subplots(1, 2, figsize=(14, 6))
-
-axs[0].scatter(X5, y5, alpha=0.6, label="Points")
-axs[0].plot(X5, y5_pred, color="red", label=f"Régression (R² = {r2_5:.2f})")
-axs[0].set_title("VSTN vs Vol réalisée (5 jours)")
-axs[0].set_xlabel("VSTN")
-axs[0].set_ylabel("Vol réalisée (annualisée)")
-axs[0].legend()
-axs[0].grid(True)
-
-axs[1].scatter(X9, y9, alpha=0.6, label="Points")
-axs[1].plot(X9, y9_pred, color="red", label=f"Régression (R² = {r2_9:.2f})")
-axs[1].set_title("VSTN vs Vol réalisée (9 jours)")
-axs[1].set_xlabel("VSTN")
-axs[1].set_ylabel("Vol réalisée (annualisée)")
-axs[1].legend()
-axs[1].grid(True)
-
-plt.tight_layout()
-plt.show()
-
-
-
-
-Comparaison
-Corrélation
-Coefficient
-R²
-VSTN vs vol 5 jours
-Moyenne
-< 1
-Faible
-VSTN vs vol 9 jours
-Plus élevée
-proche de 1
-Plus fort
-
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-
-# Charger les données
-df = pd.read_excel("tes_donnees.xlsx")  # contient : 'Date', 'SPX', 'VSTN'
-df = df.sort_values("Date").reset_index(drop=True)
-df["Date"] = pd.to_datetime(df["Date"])
-df.set_index("Date", inplace=True)
-
-# Rendements journaliers
-df["SPX_return"] = df["SPX"].pct_change()
-
-# Vol réalisée future (5 et 9 jours)
-df["realized_vol_5d"] = df["SPX_return"].rolling(window=5).std().shift(-4) * np.sqrt(252)
-df["realized_vol_9d"] = df["SPX_return"].rolling(window=9).std().shift(-8) * np.sqrt(252)
-
-# Moyennes mobiles glissantes sur 10 jours pour lisser
-df["mv_VSTN"] = df["VSTN"].rolling(10).mean()
-df["mv_real_5d"] = df["realized_vol_5d"].rolling(10).mean()
-df["mv_real_9d"] = df["realized_vol_9d"].rolling(10).mean()
-
-# Tracé
-plt.figure(figsize=(14, 6))
-plt.plot(df.index, df["mv_VSTN"], label="VSTN (moyenne mobile)", linewidth=2)
-plt.plot(df.index, df["mv_real_5d"], label="Vol réalisée 5j (moyenne mobile)", alpha=0.8)
-plt.plot(df.index, df["mv_real_9d"], label="Vol réalisée 9j (moyenne mobile)", alpha=0.8)
-plt.title("VSTN vs Volatilité Réalisée (moyennes mobiles)")
-plt.ylabel("Volatilité annualisée")
-plt.xlabel("Date")
-plt.legend()
-plt.grid(True)
-plt.tight_layout()
-plt.show()
-
-
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import r2_score
-
-# Charger les données
-df = pd.read_excel("tes_donnees.xlsx")  # contient 'Date', 'SPX', 'VSTN'
+df = pd.read_excel("tes_donnees.xlsx")  # colonnes : 'Date', 'SPX', 'VSTN'
 df["Date"] = pd.to_datetime(df["Date"])
 df = df.sort_values("Date").reset_index(drop=True)
 
 # Calcul des rendements journaliers
 df["SPX_return"] = df["SPX"].pct_change()
 
-# Fonction pour calculer la vol réalisée sur les 9 jours calendaires suivants
-vol_real_9cal = []
+# Liste pour stocker la vol réalisée sur 9 jours calendaires
+realized_vol_9d_cal = []
 
 for i in range(len(df)):
-    # extraire les rendements j+1 à j+9 calendaires
-    future_returns = df.loc[i+1:i+9, "SPX_return"]
-    if len(future_returns) == 9 and not future_returns.isna().any():
-        vol = np.std(future_returns, ddof=0) * np.sqrt(252)  # annualisation
+    date_j = df.loc[i, "Date"]
+    end_date = date_j + pd.Timedelta(days=9)  # j+9 calendaires
+
+    # Extraire les rendements entre j+1 et j+9 calendaires (jours de bourse seulement)
+    mask = (df["Date"] > date_j) & (df["Date"] <= end_date)
+    future_returns = df.loc[mask, "SPX_return"]
+
+    if len(future_returns) >= 5:  # on garde les cas où il y a assez de jours
+        vol = np.std(future_returns, ddof=0) * np.sqrt(252)  # annualisée
     else:
         vol = np.nan
-    vol_real_9cal.append(vol)
+    realized_vol_9d_cal.append(vol)
 
-df["realized_vol_9d_cal"] = vol_real_9cal
+# Ajouter la colonne au DataFrame
+df["realized_vol_9d_calendar"] = realized_vol_9d_cal
 
-# Nettoyage
-df_corr = df.dropna(subset=["VSTN", "realized_vol_9d_cal"])
-
-# Corrélation
-corr = df_corr["VSTN"].corr(df_corr["realized_vol_9d_cal"])
+# Garder uniquement les lignes valides
+df_corr = df.dropna(subset=["VSTN", "realized_vol_9d_calendar"])
 
 # Régression sans intercept
 X = df_corr["VSTN"].values.reshape(-1, 1)
-y = df_corr["realized_vol_9d_cal"].values
+y = df_corr["realized_vol_9d_calendar"].values
 reg = LinearRegression(fit_intercept=False).fit(X, y)
 y_pred = reg.predict(X)
 r2 = r2_score(y, y_pred)
+corr = df_corr["VSTN"].corr(df_corr["realized_vol_9d_calendar"])
 
 # Résultats
 print(f"Corrélation : {corr:.4f}")
-print(f"Coefficient de régression (sans intercept) : {reg.coef_[0]:.4f}")
+print(f"Coefficient (sans intercept) : {reg.coef_[0]:.4f}")
 print(f"R² : {r2:.4f}")
 
-# Graphe
+# Graphique
 plt.figure(figsize=(8, 6))
 plt.scatter(X, y, alpha=0.6, label="Points")
 plt.plot(X, y_pred, color="red", label=f"Régression (R² = {r2:.2f})")
 plt.title("VSTN vs Vol réalisée (9 jours calendaires)")
 plt.xlabel("VSTN (vol implicite)")
-plt.ylabel("Vol réalisée SPX (j+1 à j+9 calendaires)")
+plt.ylabel("Vol réalisée (SPX, j+1 à j+9 calendaires)")
 plt.grid(True)
 plt.legend()
 plt.tight_layout()
 plt.show()
+
+
+
+
+
+
+T=Time to expiration (in years)
+Cela signifie que le nombre de jours avant l'expiration des options utilisées dans le calcul est converti en années. Et cette conversion, selon les pratiques de marché et les documents techniques du Cboe, se fait en divisant par 365, soit :
+
+
+T= 
+365
+nombre de jours calendaires
+​
+ 
+Il est donc certain que le temps utilisé dans la formule est exprimé en jours calendaires. En effet, les options ont une date d’expiration fixe, indépendante du fait que le marché soit ouvert ou non. Le temps s’écoule naturellement, y compris le week-end. C’est pourquoi le VSTN est une mesure de la volatilité attendue sur une période de 9 jours calendaires.
+
+🔍 Conséquence sur notre analyse
+Lorsque nous voulons comparer le VSTN au jour j à une volatilité réalisée observée a posteriori, il est indispensable de calculer cette volatilité sur la même période de 9 jours calendaires. Sinon, les deux variables ne parleraient pas de la même chose :
+
+VSTN(j) anticipe la vol sur la période de j+1 à j+9 (calendaires),
+
+Donc, pour être cohérent, il faut mesurer la volatilité réalisée du SPX entre j+1 et j+9 calendaires.
+
+❌ Pourquoi ne pas utiliser 9 jours ouvrés ?
+Utiliser 9 jours ouvrés reviendrait à approximer une période de près de 2 semaines, soit 13 à 14 jours calendaires, ce qui est bien plus long que la maturité implicite ciblée par le VSTN. Cela fausserait l’interprétation de la comparaison : on comparerait une anticipation à court terme à une réalisation sur un horizon plus long, ce qui introduit un biais dans la corrélation et dans l’analyse du pouvoir prédictif de VSTN.
+
+✅ Conclusion
+D'après la méthodologie du Cboe, le temps T est exprimé en jours calendaires, ce qui impose de comparer VSTN uniquement à une volatilité réalisée sur 9 jours calendaires.
+C’est la seule manière rigoureuse de respecter l’horizon de volatilité implicite visé par l’indice.
+
+
+
+
+Méthode | Structure du modèle | Nature du clustering | Traitement du temps | Sortie du modèle | Interprétation pour VX/VVX
+K-Means | Algorithme de partitionnement basé sur la distance euclidienne. L’espace est divisé selon la proximité à deux centroïdes (k=2). | Dure (chaque point appartient à un seul cluster). Basé uniquement sur la géométrie des points. | Aucune. Les points sont traités indépendamment dans le temps. | Un label 0 ou 1 par jour, représentant chacun un groupe (VX/VVX bas ou élevés). | Découpe l’espace VX–VVX en deux zones, sans continuité temporelle. Deux jours consécutifs peuvent changer brutalement de régime.
+Gaussian Mixture Model (GMM) | Modèle probabiliste. Suppose que les données proviennent d’un mélange de deux lois normales multivariées (μ₁, Σ₁) et (μ₂, Σ₂). | Douce (chaque point est affecté à chaque cluster avec une probabilité). Plus souple que K-Means. | Aucune. Chaque observation est évaluée indépendamment. | Probabilités d'appartenance à chaque composante (p₁, p₂), et cluster dominant. | Segmentation plus nuancée : capte mieux les observations intermédiaires entre régimes, mais reste "hors du temps".
+Hidden Markov Model (HMM) | Modèle à états latents. Les observations (VX, VVX) sont supposées générées par un processus caché à deux états, avec matrice de transition A2×2A_{2×2}A2×2​ et lois d’émission gaussiennes conditionnelles. | Probabiliste + séquentiel. Le cluster dépend du régime précédent (Markov 1er ordre). | Intégrée. Prend en compte la structure temporelle via les transitions entre états. | Suite de régimes latents les plus probables (états 0 ou 1), cohérents dans le temps. | Permet d’identifier des phases continues où VX et VVX sont bas ou élevés. Les régimes sont dynamiques, avec persistance et transition progressive.
+
 
 
 
