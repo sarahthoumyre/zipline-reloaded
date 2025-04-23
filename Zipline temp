@@ -240,6 +240,26 @@ Parmi les trois méthodes, c’est le HMM qui reflète le mieux la réalité des
 ⸻
 
 
+import pandas as pd
+import numpy as np
+
+# Charger les données
+df = pd.read_excel("tes_donnees.xlsx")  # colonnes : 'Date', 'VSTN', 'SPX'
+df = df.sort_values("Date").reset_index(drop=True)
+
+# Calcul des rendements
+df["SPX_return"] = df["SPX"].pct_change()
+
+# Vol réalisée sur les 9 jours suivants (rolling std sur j+1 à j+9)
+df["realized_vol_9d"] = df["SPX_return"].rolling(window=9).std().shift(-8) * np.sqrt(252)
+
+# Décaler la série pour que VSTN au jour j corresponde à la vol réalisée j+1 à j+9
+df_corr = df.dropna(subset=["VSTN", "realized_vol_9d"])
+
+# Corrélation
+corr = df_corr["VSTN"].corr(df_corr["realized_vol_9d"])
+print(f"Corrélation VSTN vs vol réalisée future (9j ouvrés) : {corr:.4f}")
+
 
 
 
