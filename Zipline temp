@@ -153,3 +153,26 @@ plot_3d(df_clust, "cluster_hmm", "Hidden Markov Model (3D)")
 
 
 
+import pandas as pd
+
+# Chargement de ton tableau (remplace 'fichier.csv' par le nom réel)
+df = pd.read_csv("fichier.csv")  # ou pd.read_excel("fichier.xlsx")
+
+# Liste des colonnes à extraire
+colonnes_cibles = ['col1', 'col2', 'col3']  # remplace par ta vraie liste
+
+# Extraction de toutes les valeurs non vides
+valeurs = pd.Series(dtype=object)
+for col in colonnes_cibles:
+    valeurs = pd.concat([valeurs, df[col].dropna()])
+
+# Suppression des doublons
+valeurs_uniques = valeurs.drop_duplicates().reset_index(drop=True)
+
+# Sauvegarde dans un fichier Excel
+valeurs_uniques.to_excel("valeurs_uniques.xlsx", index=False, header=["Valeurs"])
+
+
+
+
+
