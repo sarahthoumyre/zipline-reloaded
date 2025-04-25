@@ -174,5 +174,76 @@ valeurs_uniques.to_excel("valeurs_uniques.xlsx", index=False, header=["Valeurs"]
 
 
 
+import pandas as pd
+import numpy as np
+from sklearn.cluster import KMeans
+from sklearn.mixture import GaussianMixture
+from hmmlearn.hmm import GaussianHMM
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+# === 1. Charger et préparer les données ===
+df = pd.read_excel("tes_donnees.xlsx")  # colonnes : 'Date', 'SPX', 'VSTN', 'VIX'
+df["Date"] = pd.to_datetime(df["Date"])
+df = df.sort_values("Date").reset_index(drop=True)
+
+# === 2. Rendements journaliers SPX ===
+df["SPX_return"] = df["SPX"].pct_change()
+
+# === 3. Taux sans risque annualisé (ex : 2.5%) ===
+rf_annual = 0.025
+rf_daily = (1 + rf_annual)**(1/252) - 1
+
+# === 4. Calcul de la Downside Deviation (sur fenêtre glissante de 20 jours par exemple) ===
+def downside_deviation(series, rf):
+    negative_excess = np.minimum(series - rf, 0)
+    return np.sqrt(np.mean(negative_excess**2)) * np.sqrt(252)
+
+window = 20  # fenêtre glissante (modifiable)
+downside_list = []
+
+for i in range(len(df)):
+    if i >= window:
+        window_returns = df.loc[i - window + 1:i, "SPX_return"]
+        dd = downside_deviation(window_returns.values, rf_daily)
+        downside_list.append(dd)
+    else:
+        downside_list.append(np.nan)
+
+df["downside_dev"] = downside_list
+
+# === 5. Nettoyage des données ===
+df_clust = df.dropna(subset=["VSTN", "VIX", "downside_dev"])
+X = df_clust[["VSTN", "VIX", "downside_dev"]].values
+
+# === 6. K-Means ===
+kmeans = KMeans(n_clusters=2, random_state=0).fit(X)
+df_clust["cluster_kmeans"] = kmeans.labels_
+
+# === 7. GMM ===
+gmm = GaussianMixture(n_components=2, random_state=0).fit(X)
+df_clust["cluster_gmm"] = gmm.predict(X)
+
+# === 8. HMM ===
+hmm = GaussianHMM(n_components=2, covariance_type="full", random_state=0).fit(X)
+df_clust["cluster_hmm"] = hmm.predict(X)
+
+# === 9. Graphes 3D ===
+def plot_3d(df, cluster_col, title):
+    fig = plt.figure(figsize=(10, 6))
+    ax = fig.add_subplot(111, projection='3d')
+    sc = ax.scatter(df["VSTN"], df["VIX"], df["downside_dev"],
+                    c=df[cluster_col], cmap="coolwarm", alpha=0.7)
+    ax.set_xlabel("VSTN")
+    ax.set_ylabel("VIX")
+    ax.set_zlabel("Downside Deviation (annualisée)")
+    ax.set_title(title)
+    plt.tight_layout()
+    plt.show()
+
+plot_3d(df_clust, "cluster_kmeans", "K-Means Clustering (VSTN, VIX, Downside Deviation)")
+plot_3d(df_clust, "cluster_gmm", "GMM Clustering (VSTN, VIX, Downside Deviation)")
+plot_3d(df_clust, "cluster_hmm", "HMM Clustering (VSTN, VIX, Downside Deviation)")
+
 
 
