@@ -444,4 +444,72 @@ plt.legend()
 plt.tight_layout()
 plt.show()
 
+====
+
+import pandas as pd
+import numpy as np
+import statsmodels.api as sm
+import matplotlib.pyplot as plt
+
+# Charger les données
+df = pd.read_excel("tes_donnees.xlsx")
+df["Date"] = pd.to_datetime(df["Date"])
+df = df.sort_values("Date").reset_index(drop=True)
+
+# Calcul des moves daily
+df["SPX_return"] = df["SPX"].pct_change() * 100  # en %
+df["VIX_diff"] = df["VIX"].diff()  # différence brute en points
+
+# Nettoyer les NaN
+df_clean = df.dropna(subset=["SPX_return", "VIX_diff"])
+
+# Split données
+df_down = df_clean[df_clean["SPX_return"] < 0]  # SPX baisse
+df_up = df_clean[df_clean["SPX_return"] > 0]    # SPX hausse
+
+# Régression SPX baisse
+X_down = df_down["SPX_return"].values.reshape(-1, 1)
+y_down = df_down["VIX_diff"].values
+model_down = sm.OLS(y_down, X_down).fit()
+
+# Régression SPX hausse
+X_up = df_up["SPX_return"].values.reshape(-1, 1)
+y_up = df_up["VIX_diff"].values
+model_up = sm.OLS(y_up, X_up).fit()
+
+# Résultats
+print("Quand SPX baisse :")
+print(f"Coefficient : {model_down.params[0]:.4f}")
+print(f"R² : {model_down.rsquared:.4f}\n")
+
+print("Quand SPX monte :")
+print(f"Coefficient : {model_up.params[0]:.4f}")
+print(f"R² : {model_up.rsquared:.4f}")
+
+# Optionnel : tracer les deux régressions sur deux graphes
+plt.figure(figsize=(14,6))
+
+# SPX baisse
+plt.subplot(1, 2, 1)
+plt.scatter(df_down["SPX_return"], df_down["VIX_diff"], alpha=0.6, label="Data")
+plt.plot(df_down["SPX_return"], model_down.predict(X_down), color='red', label=f"Régression (coef = {model_down.params[0]:.2f})")
+plt.title("Régression VIX_diff vs SPX_return (SPX baisse)")
+plt.xlabel("Move SPX (%)")
+plt.ylabel("VIX Difference (points)")
+plt.grid(True)
+plt.legend()
+
+# SPX hausse
+plt.subplot(1, 2, 2)
+plt.scatter(df_up["SPX_return"], df_up["VIX_diff"], alpha=0.6, label="Data")
+plt.plot(df_up["SPX_return"], model_up.predict(X_up), color='green', label=f"Régression (coef = {model_up.params[0]:.2f})")
+plt.title("Régression VIX_diff vs SPX_return (SPX hausse)")
+plt.xlabel("Move SPX (%)")
+plt.ylabel("VIX Difference (points)")
+plt.grid(True)
+plt.legend()
+
+plt.tight_layout()
+plt.show()
+
 
