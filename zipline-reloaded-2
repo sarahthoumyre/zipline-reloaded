@@ -402,3 +402,46 @@ def update_portfolio_market_value(self, date: datetime) -> None:
 pas
 
 ⸻
+
+
+import pandas as pd
+import numpy as np
+import statsmodels.api as sm
+import matplotlib.pyplot as plt
+
+# Charger les données avec 'Date', 'SPX', 'VIX'
+df = pd.read_excel("tes_donnees.xlsx")
+df["Date"] = pd.to_datetime(df["Date"])
+df = df.sort_values("Date").reset_index(drop=True)
+
+# Calcul des moves daily
+df["SPX_return"] = df["SPX"].pct_change() * 100  # en %
+df["VIX_move_abs"] = df["VIX"].pct_change().abs() * 100  # variation absolue en %
+
+# Nettoyer les NaN du début
+df_clean = df.dropna(subset=["SPX_return", "VIX_move_abs"])
+
+# Régression : VIX_move_abs ~ SPX_return (sans constante)
+X = df_clean["SPX_return"].values.reshape(-1, 1)
+y = df_clean["VIX_move_abs"].values
+
+model = sm.OLS(y, X).fit()
+coef = model.params[0]
+r2 = model.rsquared
+
+print(f"Coefficient : {coef:.4f}")
+print(f"R² : {r2:.4f}")
+
+# Graphe
+plt.figure(figsize=(8,6))
+plt.scatter(df_clean["SPX_return"], df_clean["VIX_move_abs"], alpha=0.6, label="Data")
+plt.plot(df_clean["SPX_return"], model.predict(X), color='red', label=f"Régression (coef = {coef:.2f})")
+plt.title("Régression |Move VIX| vs Move SPX (daily)")
+plt.xlabel("Move SPX (%)")
+plt.ylabel("|Move VIX| (%)")
+plt.grid(True)
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+
