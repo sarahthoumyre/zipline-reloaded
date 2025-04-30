@@ -553,3 +553,56 @@ ax2.legend()
 plt.tight_layout()
 plt.show()
 
+import pandas as pd
+import numpy as np
+import statsmodels.api as sm
+import matplotlib.pyplot as plt
+
+# Charger les données
+df = pd.read_excel("tes_donnees.xlsx")
+df["Date"] = pd.to_datetime(df["Date"])
+df = df.sort_values("Date").reset_index(drop=True)
+
+# Calcul des moves daily
+df["SPX_return"] = df["SPX"].pct_change() * 100  # en %
+df["VIX_diff"] = df["VIX"].diff()  # différence en points
+
+# Nettoyer les NaN
+df_clean = df.dropna(subset=["SPX_return", "VIX_diff"])
+
+# Régression sans constante
+X = df_clean["SPX_return"].values.reshape(-1, 1)
+y = df_clean["VIX_diff"].values
+model = sm.OLS(y, X).fit()
+
+# Résultats
+coef = model.params[0]
+r2 = model.rsquared
+print(f"Coefficient : {coef:.4f}")
+print(f"R² : {r2:.4f}")
+
+# === Graphe avec axes centrés ===
+fig, ax = plt.subplots(figsize=(8, 6))
+ax.scatter(df_clean["SPX_return"], df_clean["VIX_diff"], alpha=0.6, label="Data")
+ax.plot(df_clean["SPX_return"], model.predict(X), color='red', label=f"Régression (coef = {coef:.2f})")
+
+# Titre et labels
+ax.set_title("Régression VIX_diff vs SPX_return (tous les jours)")
+ax.set_xlabel("Move SPX (%)")
+ax.set_ylabel("VIX Difference (points)")
+
+# Centrer les axes sur (0,0)
+ax.spines['left'].set_position('zero')
+ax.spines['bottom'].set_position('zero')
+ax.spines['right'].set_color('none')
+ax.spines['top'].set_color('none')
+ax.yaxis.set_ticks_position('left')
+ax.xaxis.set_ticks_position('bottom')
+ax.axhline(0, color='gray', linewidth=0.5)
+ax.axvline(0, color='gray', linewidth=0.5)
+
+ax.legend()
+plt.tight_layout()
+plt.show()
+
+
