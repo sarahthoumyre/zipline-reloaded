@@ -606,3 +606,71 @@ plt.tight_layout()
 plt.show()
 
 
+
+000
+
+
+class MarketData:
+    """
+    Singleton class to access and manage financial data from a specified source.
+
+    Args:
+        source (str): Data source name (e.g. "OptionMetrics", "TRTH", "Bloomberg").
+        preload (bool): If True, load a default dataset on instantiation. Otherwise, data is loaded on demand.
+
+    Attributes:
+        source (str): Name of the data source.
+        data (pd.DataFrame): Loaded dataset (can be empty initially).
+        loaded_rics (set[str]): Tracks which RICs have already been loaded.
+    """
+    _instance = None
+
+    def __new__(cls, source: str, preload: bool = True):
+        if cls._instance is None:
+            cls._instance = super(MarketData, cls).__new__(cls)
+            cls._instance.source = source
+            cls._instance.loaded_rics = set()
+            cls._instance.data = cls._instance._load_data(source) if preload else pd.DataFrame()
+        return cls._instance
+
+    def _load_data(self, source: str) -> pd.DataFrame:
+        """Loads and returns the full dataset for the specified source."""
+        pass
+
+    def load_price(self, start: datetime, end: datetime, ric: str) -> pd.DataFrame:
+        """Loads and stores price data for a single RIC over a time range."""
+        pass
+
+    def get_price_by_list(self, rics: list[str], fields: list[str], start: datetime, end: datetime) -> pd.DataFrame:
+        """Returns market data for multiple RICs and fields over a given time range."""
+        pass
+
+    def get_ric_from_option_parameters(
+        self,
+        underlying: str,
+        strike: float,
+        maturity: datetime,
+        option_type: Literal["call", "put"]
+    ) -> Optional[str]:
+        """Finds the RIC of an option based on underlying, strike, maturity, and type."""
+        pass
+
+    def get_available_options(self, underlying: str, as_of: datetime) -> pd.DataFrame:
+        """Returns all unexpired options for a given underlying as of the specified date."""
+        pass
+
+
+
+===
+
+Élément
+Rôle
+_instance = None
+Initialise le singleton (stockage statique)
+__new__()
+Contrôle la création : une seule instance autorisée
+source, loaded_rics, data
+Initialisent le contexte de travail (données et configuration)
+return cls._instance
+Assure que toutes les utilisations renvoient la même instance unique
+
