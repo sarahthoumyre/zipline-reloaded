@@ -756,3 +756,176 @@ Elle est pensée pour être efficace, modulaire et alignée avec les standards i
 ⸻
 
 Souhaites-tu que je t’aide à rédiger une version plus courte à l’oral pour la présenter à un responsable technique ?
+
+
+
+
+
+0
+from datetime import datetime
+from typing import Optional, Literal, Callable, Union
+import pandas as pd
+
+class Instrument:
+    def __init__(
+        self,
+        ticker: str,
+        code: str,
+        denomination_currency: str,
+        calendar_name: str = "NYSE"
+    ):
+        self.ticker = ticker
+        self.code = code
+        self.denomination_currency = denomination_currency
+        self.calendar_name = calendar_name
+
+    def market_value(self, data: 'MarketData', date: datetime) -> float:
+        pass  # Compute the instrument's market value using MarketData
+
+    def is_expired(self, timestamp: pd.Timestamp) -> bool:
+        pass  # Check whether the instrument has expired as of the given timestamp
+
+
+class Stock(Instrument):
+    def __init__(
+        self,
+        ticker: str,
+        denomination_currency: str,
+        calendar_name: str = "NYSE",
+        code: Optional[str] = "COMMON_STOCK"
+    ):
+        super().__init__(ticker, code, denomination_currency, calendar_name)
+
+
+class Option(Instrument):
+    def __init__(
+        self,
+        ticker: str,
+        code: str,
+        denomination_currency: str,
+        calendar_name: str,
+        underlying: str,
+        strike: float,
+        option_type: Literal['call', 'put'],
+        benchmark_index: str,
+        payoff: str,
+        expiration_date: datetime,
+        put: Optional[str] = None,
+        strike_price: Optional[float] = None,
+        benchmark_option_type: Optional[str] = None,
+        exercise_type: Optional[str] = None,
+        contract_size: Optional[float] = None,
+        agreed_discount_rate: Optional[float] = None,
+        code_type: Optional[str] = "EQUITY_OPTION"
+    ):
+        super().__init__(ticker, code, denomination_currency, calendar_name)
+        self.underlying = underlying
+        self.strike = strike
+        self.option_type = option_type
+        self.benchmark_index = benchmark_index
+        self.payoff_formula = payoff
+        self.expiration_date = expiration_date
+        self.put = put
+        self.strike_price = strike_price
+        self.benchmark_option_type = benchmark_option_type
+        self.exercise_type = exercise_type
+        self.contract_size = contract_size
+        self.agreed_discount_rate = agreed_discount_rate
+        self.code_type = code_type
+
+    def payoff(self, spot: float) -> float:
+        pass  # Implement the payoff logic based on option type and strike
+
+
+class Future(Instrument):
+    def __init__(
+        self,
+        ticker: str,
+        code: str,
+        denomination_currency: str,
+        calendar_name: str,
+        underlying: str,
+        strike: float,
+        expiration_date: datetime,
+        payoff: Callable[[float], float],
+        exercise_type: Optional[str] = None,
+        contract_size: Optional[float] = None,
+        agreed_discount_rate: Optional[float] = None,
+        code_type: Optional[str] = "EQUITY_FUTURE"
+    ):
+        super().__init__(ticker, code, denomination_currency, calendar_name)
+        self.underlying = underlying
+        self.strike = strike
+        self.expiration_date = expiration_date
+        self.payoff_formula = payoff
+        self.exercise_type = exercise_type
+        self.contract_size = contract_size
+        self.agreed_discount_rate = agreed_discount_rate
+        self.code_type = code_type
+
+    def payoff(self, spot: float) -> float:
+        pass  # Implement payoff logic for the future contract
+
+
+class InstrumentFactory:
+    def __init__(self):
+        self.instruments: dict[str, Instrument] = {}
+
+    def create_stock(
+        self,
+        ticker: str,
+        code: str,
+        denomination_currency: str,
+        calendar_name: str
+    ) -> Stock:
+        return Stock(ticker, denomination_currency, calendar_name, code)
+
+    def create_option(
+        self,
+        ticker: str,
+        code: str,
+        denomination_currency: str,
+        calendar_name: str,
+        underlying: str,
+        strike: float,
+        option_type: Literal['call', 'put'],
+        benchmark_index: str,
+        payoff: str,
+        expiration_date: datetime,
+        put: Optional[str] = None,
+        strike_price: Optional[float] = None,
+        benchmark_option_type: Optional[str] = None,
+        exercise_type: Optional[str] = None,
+        contract_size: Optional[float] = None,
+        agreed_discount_rate: Optional[float] = None,
+        code_type: Optional[str] = "EQUITY_OPTION"
+    ) -> Option:
+        return Option(
+            ticker, code, denomination_currency, calendar_name,
+            underlying, strike, option_type, benchmark_index, payoff,
+            expiration_date, put, strike_price, benchmark_option_type,
+            exercise_type, contract_size, agreed_discount_rate, code_type
+        )
+
+    def create_future(
+        self,
+        ticker: str,
+        code: str,
+        denomination_currency: str,
+        calendar_name: str,
+        underlying: str,
+        strike: float,
+        expiration_date: datetime,
+        payoff: Callable[[float], float],
+        exercise_type: Optional[str] = None,
+        contract_size: Optional[float] = None,
+        agreed_discount_rate: Optional[float] = None,
+        code_type: Optional[str] = "EQUITY_FUTURE"
+    ) -> Future:
+        return Future(
+            ticker, code, denomination_currency, calendar_name,
+            underlying, strike, expiration_date, payoff,
+            exercise_type, contract_size, agreed_discount_rate, code_type
+        )
+
+
