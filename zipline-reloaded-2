@@ -674,3 +674,85 @@ Initialisent le contexte de travail (données et configuration)
 return cls._instance
 Assure que toutes les utilisations renvoient la même instance unique
 
+
+===
+
+Voici un texte descriptif clair, structuré et professionnel que tu peux utiliser pour présenter la conception de ta classe MarketData et justifier tous les choix techniques :
+
+⸻
+
+Présentation de la classe MarketData
+
+La classe MarketData est conçue comme un singleton, afin de garantir une unique interface centralisée d’accès aux données de marché dans le moteur de backtest. Elle permet de gérer, charger et interroger efficacement les données provenant de sources diverses comme TRTH, OptionMetrics ou Bloomberg.
+
+⸻
+
+Objectif principal
+
+Fournir à la stratégie, au portefeuille ou à tout autre composant une source de données cohérente, efficace et unique, tout en supportant :
+	•	le chargement global au démarrage si besoin,
+	•	le chargement à la demande (RICs ou options spécifiques),
+	•	une logique de traçabilité des RICs déjà utilisés.
+
+⸻
+
+Design : choix techniques
+
+1. Singleton (__new__() + _instance)
+	•	Le design singleton permet d’éviter de charger plusieurs fois les mêmes données et garantit la cohérence globale dans l’accès aux prix.
+	•	Tous les modules (Strategy, Portfolio, etc.) partagent exactement la même instance de données.
+
+2. Paramètre source
+	•	L’argument source spécifie clairement d’où provient la donnée (ex: OptionMetrics, TRTH…).
+	•	Cela permet d’adapter dynamiquement la logique de chargement, les formats ou les filtres selon le fournisseur.
+
+3. Chargement flexible (preload)
+	•	Le paramètre preload permet de choisir entre :
+	•	précharger un dataset par défaut dès l’instanciation, ou
+	•	laisser la classe vide et charger à la demande.
+	•	Cela permet d’adapter l’usage à différents contextes (ex: backtest léger vs complet).
+
+4. Attributs
+	•	self.data contient un DataFrame centralisé servant de cache local.
+	•	self.loaded_rics est un ensemble qui trace tous les identifiants d’instruments déjà chargés → utile pour éviter les doublons et optimiser les appels.
+
+⸻
+
+Méthodes : description et objectifs
+
+load_price(start, end, ric)
+	•	Permet de charger les données de prix d’un instrument (RIC) sur une période donnée.
+	•	Alimente automatiquement self.data et self.loaded_rics.
+
+get_price_by_list(rics, fields, start, end)
+	•	Permet de récupérer un sous-ensemble structuré des données pour plusieurs instruments et plusieurs champs (prix, volume, volatilité…).
+
+get_ric_from_option_parameters(underlying, strike, maturity, option_type)
+	•	Permet de retrouver un RIC à partir de paramètres d’option (strike, type, maturité…).
+	•	Cette méthode isole la logique de recherche dans une base d’options, utile pour générer dynamiquement des instruments dans la stratégie.
+
+get_available_options(underlying, as_of)
+	•	Fournit la liste des options listées pour un actif sous-jacent à une date donnée, en filtrant les instruments expirés.
+
+⸻
+
+Évolutivité
+
+La classe est facilement extensible :
+	•	on peut intégrer d’autres méthodes (ex : get_dividends, get_futures_curve, etc.)
+	•	le support multi-source peut évoluer vers des priorités ou des mappings de RICs entre fournisseurs.
+
+⸻
+
+Conclusion
+
+Cette architecture garantit une robustesse maximale, avec :
+	•	des accès aux données contrôlés et centralisés,
+	•	un chargement optimisé en mémoire,
+	•	une interface claire pour la stratégie et le backtest.
+
+Elle est pensée pour être efficace, modulaire et alignée avec les standards institutionnels.
+
+⸻
+
+Souhaites-tu que je t’aide à rédiger une version plus courte à l’oral pour la présenter à un responsable technique ?
