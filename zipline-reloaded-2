@@ -513,3 +513,43 @@ plt.tight_layout()
 plt.show()
 
 
+# ... code précédent jusqu'à plt.subplot ...
+
+plt.figure(figsize=(14,6))
+
+# Fonction pour centrer les axes
+def center_axes(ax):
+    ax.spines['left'].set_position('zero')
+    ax.spines['bottom'].set_position('zero')
+    ax.spines['right'].set_color('none')
+    ax.spines['top'].set_color('none')
+    ax.yaxis.set_ticks_position('left')
+    ax.xaxis.set_ticks_position('bottom')
+    ax.axhline(0, color='gray', linewidth=0.5)
+    ax.axvline(0, color='gray', linewidth=0.5)
+
+# SPX baisse
+ax1 = plt.subplot(1, 2, 1)
+ax1.scatter(df_down["SPX_return"], df_down["VIX_diff"], alpha=0.6, label="Data")
+ax1.plot(df_down["SPX_return"], model_down.predict(X_down), color='red',
+         label=f"Régression (coef = {model_down.params[0]:.2f})")
+ax1.set_title("Régression VIX_diff vs SPX_return (SPX baisse)")
+ax1.set_xlabel("Move SPX (%)")
+ax1.set_ylabel("VIX Difference (points)")
+center_axes(ax1)
+ax1.legend()
+
+# SPX hausse
+ax2 = plt.subplot(1, 2, 2)
+ax2.scatter(df_up["SPX_return"], df_up["VIX_diff"], alpha=0.6, label="Data")
+ax2.plot(df_up["SPX_return"], model_up.predict(X_up), color='green',
+         label=f"Régression (coef = {model_up.params[0]:.2f})")
+ax2.set_title("Régression VIX_diff vs SPX_return (SPX hausse)")
+ax2.set_xlabel("Move SPX (%)")
+ax2.set_ylabel("VIX Difference (points)")
+center_axes(ax2)
+ax2.legend()
+
+plt.tight_layout()
+plt.show()
+
