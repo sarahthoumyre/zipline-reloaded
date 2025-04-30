@@ -929,3 +929,85 @@ class InstrumentFactory:
         )
 
 
+===
+
+from datetime import datetime
+from typing import Optional, Literal, Callable
+import pandas as pd
+
+class MarketData:
+    """
+    Singleton class to access and manage financial data from multiple sources.
+    Supports dynamic symbol resolution and source mapping by instrument type.
+    """
+    _instance = None
+
+    def __new__(cls, source: str, source_map: Optional[dict[str, str]] = None):
+        if cls._instance is None:
+            cls._instance = super(MarketData, cls).__new__(cls)
+            cls._instance.source = source
+            cls._instance.source_map = source_map or {
+                "option": "OptionMetrics",
+                "future": "Bloomberg",
+                "stock": "TRTH"
+            }
+            cls._instance.loaded_rics = set()
+            cls._instance.data = pd.DataFrame()
+            cls._instance.identifier_map = pd.DataFrame()
+        return cls._instance
+
+    def load_price(
+        self,
+        start: datetime,
+        end: datetime,
+        identifier: str,
+        identifier_type: Literal["ric", "ticker", "symbol"] = "ric"
+    ) -> pd.DataFrame:
+        """Loads price data for a given identifier and time range."""
+        pass
+
+    def get_price_by_list(
+        self,
+        identifiers: list[str],
+        fields: list[str],
+        start: datetime,
+        end: datetime,
+        identifier_type: Literal["ric", "ticker", "symbol"] = "ric"
+    ) -> pd.DataFrame:
+        """Returns data for multiple identifiers and fields over a time period."""
+        pass
+
+    def get_ric_from_option_parameters(
+        self,
+        underlying: str,
+        strike: float,
+        maturity: datetime,
+        option_type: Literal["call", "put"],
+        source: Optional[str] = None,
+        identifier_type: Literal["ric", "ticker", "symbol"] = "symbol"
+    ) -> Optional[str]:
+        """Returns the identifier of an option based on characteristics."""
+        pass
+
+    def get_available_options(
+        self,
+        underlying: str,
+        as_of: datetime,
+        source: Optional[str] = None
+    ) -> pd.DataFrame:
+        """Returns all non-expired options for a given underlying as of a date."""
+        pass
+
+    def translate_identifier(
+        self,
+        identifier: str,
+        from_type: Literal["ric", "ticker", "symbol"],
+        to_type: Literal["ric", "ticker", "symbol"]
+    ) -> Optional[str]:
+        """Translates an identifier between naming conventions."""
+        pass
+
+    def update_identifier_map(self, mapping_df: pd.DataFrame) -> None:
+        """Updates the internal identifier translation table."""
+        self.identifier_map = mapping_df
+
