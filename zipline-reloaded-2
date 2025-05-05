@@ -1,114 +1,285 @@
+from typing import Optional, Literal, Any
+import pandas as pd
+from datetime import datetime
 
+# Metaclass to enforce a singleton per source
 class SingletonPerSource(type):
+    """
+    This metaclass ensures that only one instance of a class exists per unique 'source' parameter.
+    It's useful when we want to avoid reloading or duplicating resources for the same data provider.
+    """
     _instances: dict[str, Any] = {}
 
     def __call__(cls, source: str, *args, **kwargs):
+        # If the source hasn't been instantiated yet, create and store it
         if source not in cls._instances:
             cls._instances[source] = super().__call__(source, *args, **kwargs)
+        # Return the existing instance for the same source
         return cls._instances[source]
 
-
+# Singleton per source – ensures only one instance of MarketData exists per data source
 class MarketData(metaclass=SingletonPerSource):
+
+    # Inner class to manage both local (per instance) and global (shared) caching
     class CacheManager:
-        """
-        Inner cache manager that handles both local and global cache.
-        - local_cache: specific to one source (e.g. TRTH, Bloomberg)
-        - global_cache: shared across all MarketData instances
-        """
         def __init__(self):
-            # Local cache for this specific MarketData instance
+            # Local cache: private to the instance, used for quick access in current context
             self.local_cache: dict[str, dict[str, pd.DataFrame]] = {}
-            # Reference to the class-wide global cache
+
+            # Global cache: shared across all MarketData instances, avoids duplicate downloads
             self.global_cache: dict[str, dict[str, pd.DataFrame]] = MarketData._global_cache
 
-        # Retrieve data from the local cache using a unique key(self, key: str) -> Optional[pd.DataFrame]:
+        # Retrieve data from local cache if available
+        def get_from_local(self, key: str) -> Optional[pd.DataFrame]:
             return self.local_cache.get(key)
 
-                # Store data into the local cache under a given key
+        # Store data in local cache
         def set_to_local(self, key: str, data: pd.DataFrame):
             self.local_cache[key] = data
 
-                # Retrieve data from the shared global cache
+        # Retrieve data from global cache if available
         def get_from_global(self, key: str) -> Optional[pd.DataFrame]:
             return self.global_cache.get(key)
 
-                # Store data into the shared global cache under a given key
+        # Store data in global cache
         def set_to_global(self, key: str, data: pd.DataFrame):
             self.global_cache[key] = data
-    """
-    Singleton class to access and manage financial data from multiple sources.
-    Supports dynamic symbol resolution and source mapping by instrument type.
-    Manages multiple source-specific singletons and layered cache control.
-    """
+
+    # Class-level global cache: shared between all MarketData instances
     _global_cache: dict = {}
 
-        def __init__(self, source: str, source_map: Optional[dict[str, str]] = None):
+    def __init__(self, source: str, source_map: Optional[dict[str, str]] = None):
+        # Primary source name (e.g., "OptionMetrics", "Bloomberg", "TRTH")
         self.source = source
+
+        # Optional mapping of asset type to default source; allows flexible multi-source setup
         self.source_map = source_map or {
             "option": "OptionMetrics",
             "future": "Bloomberg",
             "stock": "TRTH"
         }
+
+        # Keeps track of loaded instruments (e.g., RICs) to avoid duplicate loads
         self.loaded_rics = set()
+
+        # Stores all retrieved market data in memory
         self.data = pd.DataFrame()
+
+        # DataFrame for mapping between identifiers (RIC ↔ Ticker ↔ Symbol)
         self.identifier_map = pd.DataFrame()
-                self.cache = self.CacheManager()
 
-    def load_price(
-        self,
-        start: datetime,
-        end: datetime,
-        identifier: str,
-        identifier_type: Literal["ric", "ticker", "symbol"] = "ric"
-    ) -> pd.DataFrame:
-        """Loads price data for a given identifier and time range."""
-        pass
+        # Instantiate cache manager to handle both local and global caching
+        self.cache = self.CacheManager()
 
-    def get_price_by_list(
-        self,
-        identifiers: list[str],
-        fields: list[str],
-        start: datetime,
-        end: datetime,
-        identifier_type: Literal["ric", "ticker", "symbol"] = "ric"
-    ) -> pd.DataFrame:
-        """Returns data for multiple identifiers and fields over a time period."""
-        pass
+    # Loads price data for a single instrument over a specified date range
+    def load_price(self, start: datetime, end: datetime, identifier: str,
+                   identifier_type: Literal["ric", "ticker", "symbol"] = "ric") -> pd.DataFrame:
+        pass  # To be implemented: should use source logic + caching
 
-    def get_ric_from_option_parameters(
-        self,
-        underlying: str,
-        strike: float,
-        maturity: datetime,
-        option_type: Literal["call", "put"],
-        source: Optional[str] = None,
-        identifier_type: Literal["ric", "ticker", "symbol"] = "symbol"
-    ) -> Optional[str]:
-        """Returns the identifier of an option based on characteristics."""
-        pass
+    # Loads price data for multiple instruments and fields in batch
+    def get_price_by_list(self, identifiers: list[str], fields: list[str],
+                          start: datetime, end: datetime,
+                          identifier_type: Literal["ric", "ticker", "symbol"] = "ric") -> pd.DataFrame:
+        pass  # To be implemented: optimized for multiple instruments
 
-    def get_available_options(
-        self,
-        underlying: str,
-        as_of: datetime,
-        source: Optional[str] = None
-    ) -> pd.DataFrame:
-        """Returns all non-expired options for a given underlying as of a date."""
-        pass
+    # Constructs a RIC (or fetches it) from option parameters: underlying, strike, maturity, type
+    def get_ric_from_option_parameters(self, underlying: str, strike: float, maturity: datetime,
+                                       option_type: Literal["call", "put"], source: Optional[str] = None,
+                                       identifier_type: Literal["ric", "ticker", "symbol"] = "symbol") -> Optional[str]:
+        pass  # To be implemented: useful for option data loaders or custom builders
 
-    def translate_identifier(
-        self,
-        identifier: str,
-        from_type: Literal["ric", "ticker", "symbol"],
-        to_type: Literal["ric", "ticker", "symbol"]
-    ) -> Optional[str]:
-        """Translates an identifier between naming conventions."""
-        pass
+    # Returns all available options for a given underlying and date
+    def get_available_options(self, underlying: str, as_of: datetime,
+                              source: Optional[str] = None) -> pd.DataFrame:
+        pass  # To be implemented: used in filtering and strategy logic
 
+    # Translates one type of identifier (e.g. ticker) into another (e.g. RIC)
+    def translate_identifier(self, identifier: str, from_type: Literal["ric", "ticker", "symbol"],
+                             to_type: Literal["ric", "ticker", "symbol"]) -> Optional[str]:
+        pass  # To be implemented: uses identifier_map for lookup
+
+    # Generates a synthetic RIC string based on option parameters
+    @staticmethod
+    def generate_ric(underlying: str, maturity: datetime, strike: float,
+                     option_type: Literal["call", "put"]) -> str:
+        pass  # To be implemented: depends on RIC format conventions
+
+    # Makes the instance callable (useful for interface flexibility)
     def __call__(self) -> 'MarketData':
-        """Allows instance to be called to retrieve itself."""
         return self
 
+    # Updates the identifier mapping table with a new DataFrame
     def update_identifier_map(self, mapping_df: pd.DataFrame) -> None:
-        """Updates the internal identifier translation table."""
         self.identifier_map = mapping_df
+
+===
+Le premier point clé, c’est l’usage d’une métaclasse personnalisée que j’ai appelée SingletonPerSource. Cette métaclasse redéfinit la méthode spéciale __call__, qui est appelée à chaque fois qu’on instancie un objet.
+Concrètement, quand je fais MarketData("OptionMetrics"), je vais dans __call__ de la métaclasse, et je vérifie si une instance existe déjà pour cette source.
+Si oui, je la réutilise. Si non, je la crée.
+Ce design permet d’avoir une seule instance par source de données, ce qui est à la fois plus efficace et plus cohérent — surtout quand on utilise plusieurs composants qui accèdent aux mêmes données.
+
+Ensuite, dans la classe MarketData elle-même, j’ai aussi défini un __call__.
+Celui-là agit au niveau de l’instance, et rend l’objet appelable comme une fonction.
+Donc, si j’ai une instance md = MarketData("OptionMetrics"), je peux faire md() et ça me retourne l’objet md.
+C’est utile pour avoir une interface plus souple : dans un moteur de stratégie, je peux utiliser un objet ou une fonction sans me poser de questions, car dans tous les cas md() fonctionnera.
+
+Au niveau de la structure de la classe MarketData, j’ai mis en place une classe interne CacheManager, qui gère à la fois :
+
+un cache local, propre à l’instance (par exemple dans un notebook),
+
+et un cache global, partagé entre toutes les instances.
+Cette distinction permet d’accélérer le chargement des données tout en évitant les doublons, notamment quand on fait tourner plusieurs stratégies ou simulations sur les mêmes actifs.
+
+Enfin, toutes les responsabilités sont bien séparées :
+
+load_price sert à charger les prix d’un instrument,
+
+get_price_by_list gère les appels en batch,
+
+translate_identifier permet de passer d’un format d’identifiant à un autre (RIC, ticker, symbol),
+
+et generate_ric construit dynamiquement un identifiant d’option à partir de ses paramètres.
+
+Le but de cette classe, c’est de fournir une API cohérente et performante pour gérer des données multi-sources, avec une couche de cache intégrée, et des outils de traduction d’identifiants. C’est une base solide pour des modules de pricing, de backtesting, ou de structuration de produits.
+
+
+===
+
+
+from datetime import datetime
+import pandas as pd
+
+# === Initial Setup ===
+start_date = datetime(2022, 1, 1)
+end_date = datetime(2022, 1, 10)
+
+# Step 1: Create MarketData and Instrument
+market_data = MarketData(source="TRTH")
+
+# Simulate data load for AAPL (normally done via API)
+aapl_data = pd.DataFrame({
+    "date": pd.date_range(start=start_date, end=end_date, freq="B"),
+    "close": [150 + i for i in range(6)]
+}).set_index("date")
+
+# Register the data manually in the global cache
+market_data.cache.set_to_global("AAPL", aapl_data)
+
+# Step 2: Create the stock instrument
+from your_module import InstrumentFactory  # replace with real path if needed
+instrument_factory = InstrumentFactory()
+aapl = instrument_factory.create_stock(
+    ticker="AAPL",
+    code="AAPL",
+    denomination_currency="USD",
+    calendar_name="NYSE"
+)
+
+# Step 3: Build the StrategyCalendar
+strategy_calendar = StrategyCalendar(
+    calendar_names=["NYSE"],
+    start_date=start_date,
+    end_date=end_date,
+    merge_mode="union",
+    timezone="America/New_York"
+)
+strategy_calendar.create_trading_calendars()
+
+# Patch get_index with fixed values for simplicity
+strategy_calendar.get_index = lambda session={"RTH"}, closed="left", force_close=True, frequency="1D": pd.date_range(start=start_date, end=end_date, freq="B")
+
+# Step 4: Define the strategy logic
+def initialize(strategy):
+    strategy.asset = aapl
+    strategy.already_bought = False
+
+def handle_data(strategy, data):
+    dt = strategy.portfolio.current_date
+    if not strategy.already_bought:
+        strategy.portfolio.add_order_quantity(
+            ticker="AAPL",
+            instrument=strategy.asset,
+            quantity=10,
+            rebalancing_date=dt,
+            review_date=dt
+        )
+        strategy.already_bought = True
+
+# Step 5: Build and run the strategy
+strategy = Strategy(
+    capital_base=10000,
+    initialize=initialize,
+    handle_data=handle_data,
+    strategy_calendar=strategy_calendar,
+    market_data=market_data
+)
+
+# Fill in method to get price
+def get_data_stub(date):
+    return market_data.cache.get_from_global("AAPL").loc[[date]]
+
+market_data.get_data = get_data_stub
+
+# Run the backtest
+def run_algorithm(self):
+    if self.initialize:
+        self.initialize(self)
+
+    index = self.strategy_calendar.get_index()
+    for dt in index:
+        self.portfolio.set_current_date(dt)
+        data = self.market_data.get_data(dt)
+        self.handle_data(self, data)
+        self.portfolio.execute_orders()
+        self.portfolio.update_portfolio_market_value(dt)
+        self.record(dt=dt, value=self.portfolio.get_portfolio_market_value(dt))
+
+    return self.performance_history
+
+Strategy.run_algorithm = run_algorithm
+
+# Add simple record function
+def record(self, **kwargs):
+    self.performance_history = pd.concat([self.performance_history, pd.DataFrame([kwargs])])
+
+Strategy.record = record
+
+# Patch update/get value and execution logic for the demo
+def execute_orders_stub(self):
+    dt = self.current_date
+    if dt not in self.order_book:
+        return
+    for instrument, qty in self.order_book[dt].items():
+        self.positions.setdefault(dt, {})[instrument] = {
+            "Q": qty,
+            "Orders": {dt: qty}
+        }
+        self.cash_operational -= qty * market_data.cache.get_from_global("AAPL").loc[dt, "close"]
+    del self.order_book[dt]
+
+Portfolio.execute_orders = execute_orders_stub
+
+def update_value_stub(self, dt):
+    if dt not in self.positions:
+        self.portfolio_value[dt] = self.cash_operational
+    else:
+        prices = market_data.cache.get_from_global("AAPL")
+        total = self.cash_operational
+        for inst, data in self.positions[dt].items():
+            total += data["Q"] * prices.loc[dt, "close"]
+        self.portfolio_value[dt] = total
+
+Portfolio.update_portfolio_market_value = update_value_stub
+
+def get_value_stub(self, dt):
+    return self.portfolio_value.get(dt, 0)
+
+Portfolio.get_portfolio_market_value = get_value_stub
+
+# Launch strategy
+result = strategy.run_algorithm()
+print(result)
+
+
+
+==
