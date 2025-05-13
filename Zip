@@ -1,0 +1,29 @@
+class MarketData:
+    _instances = {}
+
+    def __new__(cls, source):
+        if source not in cls._instances:
+            cls._instances[source] = super().__new__(cls)
+        return cls._instances[source]
+
+    def __init__(self, source):
+        if not hasattr(self, 'initialized'):
+            self.source = source
+            self.cache = {}
+            self.initialized = True
+
+    def get_data(self, name):
+        if name in self.cache:
+            return self.cache[name]
+
+        if self.source == "Bloomberg":
+            df = data_extraction_bloomberg(name)
+        elif self.source == "Datascope":
+            df = data_extraction_datascope(name)
+        elif self.source == "OptionMetrics":
+            df = data_extraction_optionmetrics(name)
+        else:
+            raise ValueError(f"Source inconnue : {self.source}")
+
+        self.cache[name] = df
+        return df
