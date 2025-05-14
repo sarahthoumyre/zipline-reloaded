@@ -1,0 +1,108 @@
+from collections import defaultdict
+import pandas as pd
+from datetime import datetime
+
+class Portfolio:
+    def __init__(self, cash: float, data: MarketData):
+        self.cash_operational = cash
+        self.cash_interest = 0.0
+        self.interest_rate = 0.0
+        self.last_cash_operational = cash
+
+        self.order_book = defaultdict(lambda: {"orders": {}})
+        self.positions = defaultdict(float)
+        self.order_executed = {}
+        self.cost_basis = defaultdict(float)
+        self.entry_price = defaultdict(float)
+
+        self.portfolio_value = pd.Series(dtype=float)
+        self.cash_value = pd.Series(dtype=float)
+        self.last_update_date = None
+        self.current_date = None
+        self.data = data
+
+    def set_current_date(self, date: datetime):
+        self.last_update_date = self.current_date
+        self.current_date = date
+
+    def add_order(self, instrument, amount: float, rebalancing_date: datetime, review_date: datetime = None):
+        """
+        Add a cash-based order (amount in currency) to the order book.
+        """
+        review_date = review_date or rebalancing_date
+        self.order_book[review_date]["orders"][instrument] = {
+            "amount": amount,
+            "date": rebalancing_date,
+            "mode": "amount"
+        }
+
+    def add_order_quantity(self, instrument, quantity: float, rebalancing_date: datetime, review_date: datetime = None):
+        """
+        Add a quantity-based order (number of units) to the order book.
+        """
+        review_date = review_date or rebalancing_date
+        self.order_book[review_date]["orders"][instrument] = {
+            "quantity": quantity,
+            "date": rebalancing_date,
+            "mode": "quantity"
+        }
+
+    def execute_orders(self):
+        date = self.current_date
+        self.order_executed = {}
+
+        if date not in self.order_book:
+            return
+
+        for instrument, order in self.order_book[date]["orders"].items():
+            price = self.data.get_price(date, instrument)
+
+            if order.get("mode") == "quantity":
+                quantity = order["quantity"]
+            else:
+                amount = order["amount"]
+                quantity = amount / price
+
+            self.positions[instrument] += quantity
+            self.cash_operational -= quantity * price
+            self.order_executed[instrument] = quantity
+
+            # update cost basis
+            total_qty = self.positions[instrument]
+            prev_cost = self.cost_basis[instrument]
+            self.cost_basis[instrument] = (
+                ((prev_cost * (total_qty - quantity)) + (price * quantity)) / total_qty
+            )
+
+        del self.order_book[date]
+
+    def update_portfolio_value(self, date: datetime):
+        total_value = self.cash_operational
+        for instrument, qty in self.positions.items():
+            price = self.data.get_price(date, instrument)
+            total_value += qty * price
+        self.portfolio_value[date] = total_value
+        self.cash_value[date] = self.cash_operational
+        self.last_update_date = date
+
+    def get_portfolio_market_value(self, date: datetime) -> float:
+        total_value = self.cash_operational
+        for instrument, qty in self.positions.items():
+            price = self.data.get_price(date, instrument)
+            total_value += qty * price
+        return total_value
+
+    def get_state_snapshot(self, date: datetime) -> dict:
+        state = {
+            "date": date,
+            "strategy_value": self.get_portfolio_market_value(date),
+            "positions": {inst.id: qty for inst, qty in self.positions.items()},
+            "orders": {inst.id: qty for inst, qty in self.order_executed.items()},
+            "market_price": {inst.id: self.data.get_price(date, inst) for inst in self.positions},
+            "cost_basis": {inst.id: cb for inst, cb in self.cost_basis.items()},
+            "entry_price": {inst.id: ep for inst, ep in self.entry_price.items()},
+            "cash_interest": self.cash_interest,
+            "cash_flow": self.cash_operational - self.last_cash_operational
+        }
+        self.last_cash_operational = self.cash_operational
+        return state
