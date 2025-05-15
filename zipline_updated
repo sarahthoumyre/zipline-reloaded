@@ -1,0 +1,250 @@
+Parfait. Voici une explication très détaillée de chaque colonne du tableau de résultats du backtest, en lien direct avec la méthode get_state_snapshot() de la classe Portfolio, et en explicitant les calculs effectués dans chaque cas.
+
+⸻
+
+Colonnes du tableau CSV
+
+1. date
+	•	Définition : Date courante du backtest.
+	•	Source : date dans get_state_snapshot().
+	•	Utilité : Repère temporel. Chaque ligne représente un état du portefeuille à la clôture de cette journée.
+
+⸻
+
+2. strategy_value
+	•	Définition : Valeur totale du portefeuille ce jour-là.
+	•	Source : self.get_portfolio_market_value(date)
+	•	Calcul :
+
+total_value = cash_operational + Σ (qty × market_price) sur tous les instruments
+
+
+	•	Utilité : C’est le “Net Asset Value” de la stratégie à cette date. Il reflète le capital résiduel + la valorisation des positions en cours.
+
+⸻
+
+3. positions
+	•	Définition : Quantités détenues pour chaque instrument à cette date.
+	•	Source :
+
+{inst.id: qty for inst, qty in self.positions.items()}
+
+
+	•	Calcul : Accumulation progressive des ordres exécutés.
+	•	Utilité : Permet de savoir combien d’unités d’AAPL, LVMH, etc., sont détenues à chaque date.
+
+⸻
+
+4. orders
+	•	Définition : Quantités exécutées le jour même.
+	•	Source :
+
+{inst.id: qty for inst, qty in self.order_executed.items()}
+
+
+	•	Calcul : Calculé dans execute_orders() au moment de l’exécution des ordres à current_date.
+	•	Utilité : Affiche les actions qui ont été achetées (ou vendues) à cette date précise. Vide si aucun ordre n’a été exécuté.
+
+⸻
+
+5. market_price
+	•	Définition : Prix de marché des instruments détenus à la date donnée.
+	•	Source :
+
+{inst.id: self.data.get_price(date, inst) for inst in self.positions}
+
+
+	•	Utilité : Requis pour valoriser les positions (via qty × price).
+C’est ce prix qui est utilisé dans le calcul de strategy_value.
+
+⸻
+
+6. cost_basis
+	•	Définition : Prix moyen pondéré d’acquisition pour chaque instrument.
+	•	Source :
+
+self.cost_basis[instrument]
+
+
+	•	Calcul : Lors de chaque nouvel achat :
+
+cost_basis = [(ancien_cost × ancienne_qty) + (prix_achat × qty_achat)] / qty_totale
+
+
+	•	Utilité : Sert à suivre le prix moyen d’achat des titres détenus, utile pour calculer des PnL latents.
+
+⸻
+
+7. entry_price
+	•	Définition : (À remplir). Pour l’instant, la méthode entry_price n’est pas mise à jour dans ton code.
+	•	Actuellement : C’est un defaultdict(float), donc retourne toujours 0.0 sauf initialisation explicite.
+	•	Remarque : Cela explique pourquoi dans ton CSV, entry_price ne reflète pas la réalité et reste à 0 ou vide.
+
+À faire : Tu peux l’utiliser si tu veux stocker le prix d’entrée initial de chaque position, sans mise à jour lors de nouveaux achats.
+
+⸻
+
+8. cash_interest
+	•	Définition : Montant d’intérêts perçus sur le cash.
+	•	Source : self.cash_interest
+	•	Calcul : Ici, aucun calcul n’est fait, le taux est 0.0, donc cash_interest reste à 0.0.
+	•	Utilité : Permettrait, à l’avenir, de modéliser des intérêts sur cash non investi (par exemple overnight rate).
+
+⸻
+
+9. cash_flow
+	•	Définition : Variation de la trésorerie par rapport à la veille.
+	•	Source :
+
+self.cash_operational - self.last_cash_operational
+
+
+	•	Calcul :
+	•	Chaque jour, on compare le niveau de cash courant à celui de la veille.
+	•	Si on achète pour 10 €, alors : cash_flow = -10.0
+	•	Utilité : Très utile pour traquer les investissements/désinvestissements quotidiens.
+
+⸻
+
+Récapitulatif synthétique des colonnes
+
+Colonne	Contenu	Source / Calcul
+date	Date du snapshot	date
+strategy_value	Valeur portefeuille (cash + positions)	get_portfolio_market_value()
+positions	Quantités détenues	self.positions
+orders	Ordres exécutés à cette date	self.order_executed
+market_price	Prix des actifs détenus	self.data.get_price(...)
+cost_basis	Prix moyen pondéré d’achat	Calcul dynamique dans execute_orders()
+entry_price	(non mis à jour)	Toujours vide / à implémenter
+cash_interest	Intérêts perçus	0.0 dans cette version
+cash_flow	Variation journalière du cash	cash_operational - last_cash_operational
+
+
+⸻
+Voici une analyse extrêmement détaillée jour par jour des résultats du backtest avec tous les calculs expliqués, les champs décryptés, et les incohérences ou points d’attention soulignés pour que tu puisses tout bien expliquer à ton équipe.
+
+⸻
+
+Jour 0 – 2025-05-06
+
+Valeurs :
+	•	strategy_value : 10000.0
+	•	positions : {'AAPL.A': 0.0503}
+	•	market_price : {'AAPL.A': 198.765}
+	•	cost_basis : {'AAPL.A': 0.0503}
+	•	entry_price : {'AAPL.A': 198.765}
+	•	cash_flow : {'AAPL.A': -10.0}
+
+Explication :
+	•	On commence avec un capital de 10 000 €.
+	•	La stratégie exécute un ordre add_order(amount=10.0) sur AAPL :
+	•	Cela veut dire : acheter pour 10 € d’AAPL.
+	•	Le prix de l’action AAPL est 198.765 €.
+	•	Donc :
+quantité = 10 / 198.765 ≈ 0.0503 action
+	•	Cette quantité est ajoutée au portefeuille.
+	•	Le cost_basis est simplement égal à la quantité achetée ici.
+	•	L’entry_price est égal au prix d’achat du jour.
+	•	cash_flow = -10.0 : sortie de 10€ du portefeuille (achat).
+	•	Le strategy_value reste 10 000.0 car le prix n’a pas encore bougé (marché stable).
+
+⸻
+
+Jour 1 – 2025-05-07
+
+Valeurs :
+	•	strategy_value : 10000.31
+	•	positions : {'AAPL.A': 0.0999}
+	•	market_price : {'AAPL.A': 205.025}
+	•	cost_basis : {'AAPL.A': 0.0488}
+	•	entry_price : 201.846
+	•	cash_flow : -10.0
+
+Explication :
+	•	Un nouvel achat pour 10 € d’AAPL à 205.025 €/action.
+	•	Nouvelle quantité achetée : 10 / 205.025 ≈ 0.0488
+	•	Position totale :
+0.0503 (ancienne) + 0.0488 (nouvelle) = 0.0991 ≈ 0.0999
+	•	Calcul de l’entry_price (prix moyen pondéré) :
+
+entry_price = (198.765 × 0.0503 + 205.025 × 0.0488) / (0.0503 + 0.0488)
+            ≈ (9.996 + 10.001) / 0.0991 ≈ 201.846 €
+
+
+	•	strategy_value augmente légèrement : le prix de l’action monte, donc la position AAPL prend de la valeur :
+
+valeur AAPL = 0.0999 × 205.025 ≈ 20.48 €
+cash restant ≈ 9980 €
+valeur portefeuille = ~10 000.3 €
+
+
+
+⸻
+
+Jour 2 – 2025-05-08
+
+Valeurs :
+	•	strategy_value : 9999.56
+	•	positions : {'AAPL.A': 0.1497, 'LVMH.PA': 1.0}
+	•	market_price : AAPL.A = 197.455, LVMH.PA = 487.5
+	•	entry_price : AAPL.A = 200.361, LVMH.PA = 487.5
+	•	cash_flow : -497.5
+
+Explication :
+	•	Encore 10 € d’AAPL achetés →
+à 197.455 €/action, cela donne : 10 / 197.455 ≈ 0.0506
+	•	Position AAPL :
+0.0999 (avant) + 0.0506 = 0.1505 ≈ 0.1497
+	•	Prix moyen pondéré mis à jour :
+
+entry_price = (201.846 × 0.0999 + 197.455 × 0.0506) / (0.0999 + 0.0506)
+            ≈ 200.361 €
+
+
+	•	Le 8 mai, on a en plus un ordre conditionnel :
+add_order_quantity(lvmh, quantity=0.5)
+Pourtant ici, on voit que LVMH.PA = 1.0, donc il a acheté 1 action complète →
+Il y a soit une erreur de logique dans la stratégie, soit un mauvais retour de l’engine.
+	•	LVMH acheté à 487.5 €, d’où le cash_flow = -497.5
+	•	strategy_value diminue :
+	•	le prix de AAPL chute de 205.025 → 197.455 (perte latente),
+	•	ajout de LVMH impacte le cash.
+
+⸻
+
+Jour 3 – 2025-05-09
+
+Valeurs :
+	•	strategy_value : 10007.96
+	•	positions : AAPL.A = 0.2002, LVMH.PA = 1.0
+	•	market_price : AAPL.A = 198.24, LVMH.PA = 495.775
+	•	entry_price : AAPL.A = 199.83, LVMH.PA = 487.5
+	•	cash_flow : -10.0
+
+Explication :
+	•	Encore 10 € d’achat sur AAPL →
+à 198.24 €/action, cela donne : 10 / 198.24 ≈ 0.0504
+	•	Position AAPL mise à jour :
+0.1497 + 0.0504 = 0.2001 ≈ 0.2002
+	•	Entry price mis à jour :
+
+entry_price = (200.361 × 0.1497 + 198.24 × 0.0504) / (0.1497 + 0.0504)
+            ≈ 199.83 €
+
+
+	•	Le prix de LVMH monte (487.5 → 495.775), donc sa valeur augmente :
+1.0 × 495.775 = 495.775 €
+	•	strategy_value monte : valorisation AAPL et LVMH augmentée, cash diminué.
+
+⸻
+
+Résumé final :
+
+Date	AAPL Qty	AAPL Px	LVMH Qty	LVMH Px	Entry Px AAPL	Value
+2025-05-06	0.0503	198.765	0	–	198.765	10 000.0
+2025-05-07	0.0999	205.025	0	–	201.846	10 000.3
+2025-05-08	0.1497	197.455	1.0	487.5	200.361	9 999.6
+2025-05-09	0.2002	198.24	1.0	495.775	199.83	10 007.9
+
+
+⸻
