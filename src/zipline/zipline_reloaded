@@ -1,24 +1,45 @@
+from collections import defaultdict
+import pandas as pd
+from datetime import datetime
+
 class Portfolio:
-    def __init__(self, cash: float, data: MarketData):
+    def __init__(self, cash: float, data):
         self.cash_operational = cash
         self.cash_interest = 0.0
         self.last_cash_operational = cash
 
-        self.data = data
+        self.data = data  # MarketData object
         self.order_book = defaultdict(lambda: {"orders": {}})
         self.positions = defaultdict(float)
-        self.order_executed = {}
+        self.order_executed = defaultdict(float)
         self.cost_basis = defaultdict(float)
         self.entry_price = defaultdict(float)
 
         self.portfolio_value = pd.Series(dtype=float)
         self.cash_value = pd.Series(dtype=float)
         self.position_value = pd.Series(dtype=float)
-        self.fx_used = {}  # {date: {fx_key: rate}}
+
+        self.fx_used = {}  # date: {fx_pair: rate}
         self.current_date = None
 
     def set_current_date(self, date: datetime):
         self.current_date = date
+
+    def add_order_amount(self, instrument, amount: float, rebalancing_date: datetime, review_date: datetime = None):
+        date = review_date or rebalancing_date
+        self.order_book[date]["orders"][instrument] = {
+            "amount": amount,
+            "date": rebalancing_date,
+            "mode": "amount"
+        }
+
+    def add_order_quantity(self, instrument, quantity: float, rebalancing_date: datetime, review_date: datetime = None):
+        date = review_date or rebalancing_date
+        self.order_book[date]["orders"][instrument] = {
+            "quantity": quantity,
+            "date": rebalancing_date,
+            "mode": "quantity"
+        }
 
     def execute_orders(self):
         date = self.current_date
@@ -29,7 +50,7 @@ class Portfolio:
         for instrument, order in self.order_book[date]["orders"].items():
             price = self.data.get_price(date, instrument, folder_path='Data')
 
-            # Récupération du FX utilisé si conversion
+            # Récupère et enregistre le FX si besoin
             if instrument.denomination_currency != self.data.strategy_currency:
                 fx_key = f"{instrument.denomination_currency}_{self.data.strategy_currency}"
                 fx_rate = self.data.get_fx_rate(
@@ -51,71 +72,46 @@ class Portfolio:
             self.cash_operational -= amount
             self.order_executed[instrument] = quantity
 
-            # Mise à jour du cost basis
             total_qty = self.positions[instrument]
             prev_cost = self.cost_basis[instrument]
             self.cost_basis[instrument] = (
-                ((prev_cost * (total_qty - quantity)) + (price * quantity)) / total_qty
+                (prev_cost * (total_qty - quantity) + (price * quantity)) / total_qty
+                if total_qty != 0 else 0
             )
+            self.entry_price[instrument] = price
 
         del self.order_book[date]
         if fx_today:
             self.fx_used[date] = fx_today
 
     def update_portfolio_value(self, date: datetime):
-        position_val = 0.0
+        total_position_value = 0.0
         for instrument, qty in self.positions.items():
             price = self.data.get_price(date, instrument, folder_path='Data')
-            position_val += qty * price
+            total_position_value += qty * price
 
         self.cash_value[date] = self.cash_operational
-        self.position_value[date] = position_val
-        self.portfolio_value[date] = self.cash_operational + position_val
+        self.position_value[date] = total_position_value
+        self.portfolio_value[date] = self.cash_operational + total_position_value
 
+    def get_portfolio_market_value(self, date: datetime) -> float:
+        value = self.cash_operational
+        for instrument, qty in self.positions.items():
+            price = self.data.get_price(date, instrument, folder_path='Data')
+            value += qty * price
+        return value
 
-===
-
-class Strategy:
-    def __init__(self, portfolio: Portfolio, calendar):
-        self.portfolio = portfolio
-        self.calendar = calendar
-        self.history = []
-
-    def run(self):
-        for date in self.calendar.get_index():
-            self.portfolio.set_current_date(date)
-            self.portfolio.execute_orders()
-            self.portfolio.update_portfolio_value(date)
-
-    def export_to_excel(self, filename='results.xlsx'):
-        import pandas as pd
-
-        df_main = pd.DataFrame({
-            'Date': self.portfolio.portfolio_value.index,
-            'cash_value': self.portfolio.cash_value,
-            'position_value': self.portfolio.position_value,
-            'total_value': self.portfolio.portfolio_value,
-        }).set_index('Date')
-
-        # Ajout des colonnes FX
-        all_fx_keys = set()
-        for fx_dict in self.portfolio.fx_used.values():
-            all_fx_keys.update(fx_dict.keys())
-
-        for fx in sorted(all_fx_keys):
-            df_main[fx] = [
-                self.portfolio.fx_used.get(date, {}).get(fx, None)
-                for date in df_main.index
-            ]
-
-        # Export principal + FX pages
-        with pd.ExcelWriter(filename) as writer:
-            df_main.to_excel(writer, sheet_name='Strategy')
-
-            # Export de chaque fx dans une feuille à part
-            for fx_key in sorted(all_fx_keys):
-                df_fx = pd.DataFrame({
-                    'Date': df_main.index,
-                    'rate': df_main[fx_key]
-                }).dropna()
-                df_fx.to_excel(writer, sheet_name=fx_key, index=False)
+    def get_state_snapshot(self, date: datetime) -> dict:
+        snapshot = {
+            "date": date,
+            "strategy_value": self.get_portfolio_market_value(date),
+            "positions": {inst.id: qty for inst, qty in self.positions.items()},
+            "orders": {inst.id: qty for inst, qty in self.order_executed.items()},
+            "market_price": {inst.id: self.data.get_price(date, inst, folder_path='Data') for inst in self.positions},
+            "entry_price": {inst.id: self.entry_price[inst] for inst in self.positions},
+            "cost_basis": {inst.id: self.cost_basis[inst] for inst in self.positions},
+            "cash_interest": self.cash_interest,
+            "cash_flow": self.cash_operational - self.last_cash_operational
+        }
+        self.last_cash_operational = self.cash_operational
+        return snapshot
