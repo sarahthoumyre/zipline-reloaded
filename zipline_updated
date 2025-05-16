@@ -1,44 +1,115 @@
+import os
+import pandas as pd
+from datetime import datetime
+
 class MarketData:
-    def __init__(self, instruments: list[Stock], calendar: StrategyCalendar, base_currency: str = "USD"):
-        self.instruments = instruments
+    def __init__(self, calendar, strategy_currency: str):
         self.Calendar = calendar
-        self.base_currency = base_currency
-        self.cache = {}  # stockage des données par {source}/{id}
+        self.strategy_currency = strategy_currency
+        self.cache = {}  # stocke à la fois les données prix et fx
 
-        for instrument in instruments:
-            key = f"{instrument.source}/{instrument.id}"
-            self.cache[key] = self.data_extraction_datascope(instrument)
+    def check_local_data(self, instrument, folder_path: str):
+        if instrument.denomination_currency != self.strategy_currency:
+            fx_file = f"{instrument.denomination_currency}_{self.strategy_currency}"
+            path = f"{folder_path}/FX/{fx_file}.csv"
+            if os.path.exists(path):
+                file = pd.read_csv(path)
+                max_available_date = pd.to_datetime(file['Date']).max()
+                if self.Calendar.get_index()[-1].date() <= max_available_date.date():
+                    return "FX file up to date", path
+                else:
+                    return "FX file exists but must be updated", path
+            else:
+                return "FX file missing", path
 
-            # Si devise différente, charger FX
-            if instrument.denomination_currency != self.base_currency:
-                fx_key = f"FX/{instrument.denomination_currency}/{self.base_currency}"
-                if fx_key not in self.cache:
-                    self.cache[fx_key] = self.extract_fx_rates(
-                        from_currency=instrument.denomination_currency,
-                        to_currency=self.base_currency
-                    )
+        if self.Calendar.frequency == "1D" and not self.Calendar.timezone_translate:
+            DataType = "EOD"
+        else:
+            DataType = f"FTID/{self.Calendar.frequency}"
 
-    def extract_fx_rates(self, from_currency: str, to_currency: str) -> pd.DataFrame:
-        """
-        À implémenter toi-même. 
-        Retourne un DataFrame avec colonnes : 'Date', 'FX'
-        """
-        raise NotImplementedError
+        path = f"{folder_path}/{instrument.source}/{instrument.id}/{DataType}.csv"
+        if os.path.exists(path):
+            file = pd.read_csv(path)
+            max_available_date = pd.to_datetime(file['Date']).max()
+            if self.Calendar.get_index()[-1].date() <= max_available_date.date():
+                return "Instrument file up to date", path
+            else:
+                return "Instrument file must be updated", path
+        else:
+            return "Instrument file missing", path
 
-    def get_price(self, bar: datetime, instrument: Stock) -> float:
-        key = f"{instrument.source}/{instrument.id}"
-        df = self.cache[key]
-        df['Date'] = pd.to_datetime(df['Date'])
+    def load_fx_to_cache(self, from_currency, to_currency, folder_path):
+        fx_key = f"FX/{from_currency}_{to_currency}"
+        if fx_key not in self.cache:
+            path = f"{folder_path}/FX/{from_currency}_{to_currency}.csv"
+            if os.path.exists(path):
+                df = pd.read_csv(path, parse_dates=["Date"])
+                df.set_index("Date", inplace=True)
+                self.cache[fx_key] = df
+            else:
+                inverse_key = f"FX/{to_currency}_{from_currency}"
+                path_inv = f"{folder_path}/FX/{to_currency}_{from_currency}.csv"
+                if os.path.exists(path_inv):
+                    df = pd.read_csv(path_inv, parse_dates=["Date"])
+                    df.set_index("Date", inplace=True)
+                    self.cache[inverse_key] = df
+                else:
+                    raise FileNotFoundError(f"FX file not found: {path} or {path_inv}")
 
-        price = df.loc[df['Date'].dt.date == bar.date(), 'PX_LAST'].iloc[0]
+    def get_fx_rate(self, from_currency, to_currency, date, folder_path):
+        if from_currency == to_currency:
+            return 1.0
 
-        # Si devise différente → conversion
-        if instrument.denomination_currency != self.base_currency:
-            fx_key = f"FX/{instrument.denomination_currency}/{self.base_currency}"
-            fx_df = self.cache[fx_key]
-            fx_df['Date'] = pd.to_datetime(fx_df['Date'])
-            fx = fx_df.loc[fx_df['Date'].dt.date == bar.date(), 'FX'].iloc[0]
-            return price * fx
+        fx_key = f"FX/{from_currency}_{to_currency}"
+        inverse_key = f"FX/{to_currency}_{from_currency}"
+        self.load_fx_to_cache(from_currency, to_currency, folder_path)
+
+        dt = pd.Timestamp(date)
+
+        if fx_key in self.cache:
+            return self.cache[fx_key].loc[dt]['rate']
+        elif inverse_key in self.cache:
+            return 1.0 / self.cache[inverse_key].loc[dt]['rate']
+        else:
+            raise ValueError(f"FX rate not found for {from_currency} -> {to_currency} on {date}")
+
+    def data_extraction_datascope(self, instrument, folder_path: str):
+        if self.Calendar.frequency == "1D" and not self.Calendar.timezone_translate:
+            DataType = "EOD"
+        else:
+            DataType = f"FTID/{self.Calendar.frequency}"
+
+        cache_key = f"{instrument.source}/{instrument.id}/{DataType}"
+        if cache_key not in self.cache:
+            check = self.check_local_data(instrument, folder_path)
+            if "up to date" in check[0]:
+                df = pd.read_csv(check[1])
+                self.cache[cache_key] = df
+            else:
+                # Extraction manuelle à insérer ici si nécessaire
+                raise FileNotFoundError(f"Missing or outdated file for {instrument.id}")
+
+    def get_price(self, bar, instrument, folder_path: str) -> float:
+        self.data_extraction_datascope(instrument, folder_path)
+
+        if self.Calendar.frequency == "1D" and not self.Calendar.timezone_translate:
+            DataType = "EOD"
+        else:
+            DataType = f"FTID/{self.Calendar.frequency}"
+
+        cache_key = f"{instrument.source}/{instrument.id}/{DataType}"
+        df = self.cache[cache_key]
+        df["Date"] = pd.to_datetime(df["Date"])
+        price = df.loc[df["Date"].dt.date == bar.date, "PX_LAST"].iloc[0]
+
+        if instrument.denomination_currency != self.strategy_currency:
+            fx_rate = self.get_fx_rate(
+                instrument.denomination_currency,
+                self.strategy_currency,
+                bar.date,
+                folder_path
+            )
+            return price * fx_rate
 
         return price
 
