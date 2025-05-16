@@ -1,0 +1,121 @@
+class Portfolio:
+    def __init__(self, cash: float, data: MarketData):
+        self.cash_operational = cash
+        self.cash_interest = 0.0
+        self.last_cash_operational = cash
+
+        self.data = data
+        self.order_book = defaultdict(lambda: {"orders": {}})
+        self.positions = defaultdict(float)
+        self.order_executed = {}
+        self.cost_basis = defaultdict(float)
+        self.entry_price = defaultdict(float)
+
+        self.portfolio_value = pd.Series(dtype=float)
+        self.cash_value = pd.Series(dtype=float)
+        self.position_value = pd.Series(dtype=float)
+        self.fx_used = {}  # {date: {fx_key: rate}}
+        self.current_date = None
+
+    def set_current_date(self, date: datetime):
+        self.current_date = date
+
+    def execute_orders(self):
+        date = self.current_date
+        if date not in self.order_book:
+            return
+
+        fx_today = {}
+        for instrument, order in self.order_book[date]["orders"].items():
+            price = self.data.get_price(date, instrument, folder_path='Data')
+
+            # Récupération du FX utilisé si conversion
+            if instrument.denomination_currency != self.data.strategy_currency:
+                fx_key = f"{instrument.denomination_currency}_{self.data.strategy_currency}"
+                fx_rate = self.data.get_fx_rate(
+                    instrument.denomination_currency,
+                    self.data.strategy_currency,
+                    date,
+                    folder_path='Data'
+                )
+                fx_today[fx_key] = fx_rate
+
+            if order["mode"] == "quantity":
+                quantity = order["quantity"]
+                amount = quantity * price
+            else:
+                amount = order["amount"]
+                quantity = amount / price
+
+            self.positions[instrument] += quantity
+            self.cash_operational -= amount
+            self.order_executed[instrument] = quantity
+
+            # Mise à jour du cost basis
+            total_qty = self.positions[instrument]
+            prev_cost = self.cost_basis[instrument]
+            self.cost_basis[instrument] = (
+                ((prev_cost * (total_qty - quantity)) + (price * quantity)) / total_qty
+            )
+
+        del self.order_book[date]
+        if fx_today:
+            self.fx_used[date] = fx_today
+
+    def update_portfolio_value(self, date: datetime):
+        position_val = 0.0
+        for instrument, qty in self.positions.items():
+            price = self.data.get_price(date, instrument, folder_path='Data')
+            position_val += qty * price
+
+        self.cash_value[date] = self.cash_operational
+        self.position_value[date] = position_val
+        self.portfolio_value[date] = self.cash_operational + position_val
+
+
+===
+
+class Strategy:
+    def __init__(self, portfolio: Portfolio, calendar):
+        self.portfolio = portfolio
+        self.calendar = calendar
+        self.history = []
+
+    def run(self):
+        for date in self.calendar.get_index():
+            self.portfolio.set_current_date(date)
+            self.portfolio.execute_orders()
+            self.portfolio.update_portfolio_value(date)
+
+    def export_to_excel(self, filename='results.xlsx'):
+        import pandas as pd
+
+        df_main = pd.DataFrame({
+            'Date': self.portfolio.portfolio_value.index,
+            'cash_value': self.portfolio.cash_value,
+            'position_value': self.portfolio.position_value,
+            'total_value': self.portfolio.portfolio_value,
+        }).set_index('Date')
+
+        # Ajout des colonnes FX
+        all_fx_keys = set()
+        for fx_dict in self.portfolio.fx_used.values():
+            all_fx_keys.update(fx_dict.keys())
+
+        for fx in sorted(all_fx_keys):
+            df_main[fx] = [
+                self.portfolio.fx_used.get(date, {}).get(fx, None)
+                for date in df_main.index
+            ]
+
+        # Export principal + FX pages
+        with pd.ExcelWriter(filename) as writer:
+            df_main.to_excel(writer, sheet_name='Strategy')
+
+            # Export de chaque fx dans une feuille à part
+            for fx_key in sorted(all_fx_keys):
+                df_fx = pd.DataFrame({
+                    'Date': df_main.index,
+                    'rate': df_main[fx_key]
+                }).dropna()
+                df_fx.to_excel(writer, sheet_name=fx_key, index=False)
