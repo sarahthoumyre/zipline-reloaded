@@ -3,37 +3,42 @@ class MarketData:
         self.instruments = instruments
         self.Calendar = calendar
         self.base_currency = base_currency
-        self.prices = {}  # {instrument: DataFrame}
-        self.fx_rates = {}  # {("USD", "EUR"): DataFrame}
+        self.cache = {}  # stockage des données par {source}/{id}
 
         for instrument in instruments:
-            self.prices[instrument] = self.data_extraction_datascope(instrument)
+            key = f"{instrument.source}/{instrument.id}"
+            self.cache[key] = self.data_extraction_datascope(instrument)
 
-            # Si devise différente, on extrait les taux de change
+            # Si devise différente, charger FX
             if instrument.denomination_currency != self.base_currency:
-                fx_pair = (instrument.denomination_currency, self.base_currency)
-                self.fx_rates[fx_pair] = self.extract_fx_rates(fx_pair)
+                fx_key = f"FX/{instrument.denomination_currency}/{self.base_currency}"
+                if fx_key not in self.cache:
+                    self.cache[fx_key] = self.extract_fx_rates(
+                        from_currency=instrument.denomination_currency,
+                        to_currency=self.base_currency
+                    )
 
-    def extract_fx_rates(self, fx_pair: tuple) -> pd.DataFrame:
+    def extract_fx_rates(self, from_currency: str, to_currency: str) -> pd.DataFrame:
         """
-        Tu implémentes cette méthode toi-même.
-        Elle doit retourner un DataFrame avec 'Date' et 'FX' (le taux de conversion).
+        À implémenter toi-même. 
+        Retourne un DataFrame avec colonnes : 'Date', 'FX'
         """
         raise NotImplementedError
 
     def get_price(self, bar: datetime, instrument: Stock) -> float:
-        df = self.prices[instrument]
+        key = f"{instrument.source}/{instrument.id}"
+        df = self.cache[key]
         df['Date'] = pd.to_datetime(df['Date'])
+
         price = df.loc[df['Date'].dt.date == bar.date(), 'PX_LAST'].iloc[0]
 
-        # Conversion si devise différente
+        # Si devise différente → conversion
         if instrument.denomination_currency != self.base_currency:
-            fx = self.get_fx_rate(bar, instrument.denomination_currency, self.base_currency)
+            fx_key = f"FX/{instrument.denomination_currency}/{self.base_currency}"
+            fx_df = self.cache[fx_key]
+            fx_df['Date'] = pd.to_datetime(fx_df['Date'])
+            fx = fx_df.loc[fx_df['Date'].dt.date == bar.date(), 'FX'].iloc[0]
             return price * fx
+
         return price
 
-    def get_fx_rate(self, bar: datetime, from_currency: str, to_currency: str) -> float:
-        fx_df = self.fx_rates[(from_currency, to_currency)]
-        fx_df['Date'] = pd.to_datetime(fx_df['Date'])
-        rate = fx_df.loc[fx_df['Date'].dt.date == bar.date(), 'FX'].iloc[0]
-        return rate
